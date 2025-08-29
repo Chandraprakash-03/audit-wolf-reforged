@@ -1,0 +1,387 @@
+import { Router, Response } from "express";
+import { ContractModel } from "../models/Contract";
+import { AnalysisService } from "../services/AnalysisService";
+import { authenticateToken, AuthenticatedRequest } from "../middleware/auth";
+import { body, param, validationResult } from "express-validator";
+
+const router = Router();
+const analysisService = new AnalysisService();
+
+// Validation middleware
+const validateContractCreation = [
+	body("name")
+		.trim()
+		.isLength({ min: 1, max: 100 })
+		.withMessage("Contract name must be between 1 and 100 characters"),
+	body("sourceCode")
+		.trim()
+		.isLength({ min: 1, max: 1000000 })
+		.withMessage("Source code must be between 1 and 1,000,000 characters"),
+	body("compilerVersion")
+		.optional()
+		.matches(/^\d+\.\d+(\.\d+)?$/)
+		.withMessage("Invalid compiler version format"),
+];
+
+const validateContractId = [
+	param("id").isUUID().withMessage("Invalid contract ID format"),
+];
+
+// Create a new contract
+router.post(
+	"/",
+	authenticateToken,
+	validateContractCreation,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const errors = validationResult(req);
+			if (!errors.isEmpty()) {
+				return res.status(400).json({
+					success: false,
+					error: "Validation failed",
+					details: errors.array(),
+				});
+			}
+
+			const { name, sourceCode, compilerVersion } = req.body;
+			const userId = req.user?.id;
+
+			if (!userId) {
+				return res.status(401).json({
+					success: false,
+					error: "User not authenticated",
+				});
+			}
+
+			// Validate Solidity code
+			const tempContract = new ContractModel({
+				id: "temp",
+				user_id: userId,
+				name,
+				source_code: sourceCode,
+				compiler_version: compilerVersion || "0.8.0",
+				file_hash: "temp",
+				created_at: new Date(),
+			});
+
+			const validation = tempContract.validateSolidity();
+			if (!validation.isValid) {
+				return res.status(400).json({
+					success: false,
+					error: "Invalid Solidity code",
+					details: validation.errors,
+				});
+			}
+
+			// Create the contract
+			const contract = await ContractModel.create({
+				user_id: userId,
+				name,
+				source_code: sourceCode,
+				compiler_version: compilerVersion || "0.8.0",
+			});
+
+			if (!contract) {
+				return res.status(500).json({
+					success: false,
+					error: "Failed to create contract",
+				});
+			}
+
+			// Optionally start static analysis automatically
+			let auditId: string | undefined;
+			try {
+				const analysisResult = await analysisService.startStaticAnalysis({
+					contractId: contract.id,
+					userId,
+					analysisType: "static",
+				});
+				if (analysisResult.success) {
+					auditId = analysisResult.auditId;
+				}
+			} catch (analysisError) {
+				console.warn("Failed to start automatic analysis:", analysisError);
+				// Don't fail contract creation if analysis fails to start
+			}
+
+			res.status(201).json({
+				success: true,
+				data: {
+					...contract.toJSON(),
+					auditId, // Include audit ID if analysis was started
+				},
+			});
+		} catch (error) {
+			console.error("Error creating contract:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+		return () => {};
+	}
+);
+
+// Validate contract source code
+router.post(
+	"/validate",
+	authenticateToken,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const { sourceCode } = req.body;
+
+			if (!sourceCode || typeof sourceCode !== "string") {
+				return res.status(400).json({
+					success: false,
+					error: "Source code is required",
+				});
+			}
+
+			// Create temporary contract for validation
+			const tempContract = new ContractModel({
+				id: "temp",
+				user_id: "temp",
+				name: "temp",
+				source_code: sourceCode,
+				compiler_version: "0.8.0",
+				file_hash: "temp",
+				created_at: new Date(),
+			});
+
+			const validation = tempContract.validateSolidity();
+			const metrics = tempContract.getComplexityMetrics();
+
+			res.json({
+				success: true,
+				data: {
+					isValid: validation.isValid,
+					errors: validation.errors,
+					metrics,
+				},
+			});
+		} catch (error) {
+			console.error("Error validating contract:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+		return () => {};
+	}
+);
+
+// Get user's contracts
+router.get(
+	"/",
+	authenticateToken,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const userId = req.user?.id;
+
+			if (!userId) {
+				return res.status(401).json({
+					success: false,
+					error: "User not authenticated",
+				});
+			}
+
+			const contracts = await ContractModel.findByUserId(userId);
+
+			res.json({
+				success: true,
+				data: contracts.map((contract) => contract.toJSON()),
+			});
+		} catch (error) {
+			console.error("Error fetching contracts:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+		return () => {};
+	}
+);
+
+// Get specific contract
+router.get(
+	"/:id",
+	authenticateToken,
+	validateContractId,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const errors = validationResult(req);
+			if (!errors.isEmpty()) {
+				return res.status(400).json({
+					success: false,
+					error: "Validation failed",
+					details: errors.array(),
+				});
+			}
+
+			const { id } = req.params;
+			const userId = req.user?.id;
+
+			if (!userId) {
+				return res.status(401).json({
+					success: false,
+					error: "User not authenticated",
+				});
+			}
+
+			const contract = await ContractModel.findById(id);
+
+			if (!contract) {
+				return res.status(404).json({
+					success: false,
+					error: "Contract not found",
+				});
+			}
+
+			// Check if user owns the contract
+			if (contract.user_id !== userId) {
+				return res.status(403).json({
+					success: false,
+					error: "Access denied",
+				});
+			}
+
+			res.json({
+				success: true,
+				data: contract.toJSON(),
+			});
+		} catch (error) {
+			console.error("Error fetching contract:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+		return () => {};
+	}
+);
+
+// Update contract
+router.patch(
+	"/:id",
+	authenticateToken,
+	validateContractId,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const errors = validationResult(req);
+			if (!errors.isEmpty()) {
+				return res.status(400).json({
+					success: false,
+					error: "Validation failed",
+					details: errors.array(),
+				});
+			}
+
+			const { id } = req.params;
+			const userId = req.user?.id;
+			const { name, sourceCode, compilerVersion } = req.body;
+
+			if (!userId) {
+				return res.status(401).json({
+					success: false,
+					error: "User not authenticated",
+				});
+			}
+
+			const contract = await ContractModel.findById(id);
+
+			if (!contract) {
+				return res.status(404).json({
+					success: false,
+					error: "Contract not found",
+				});
+			}
+
+			// Check if user owns the contract
+			if (contract.user_id !== userId) {
+				return res.status(403).json({
+					success: false,
+					error: "Access denied",
+				});
+			}
+
+			// For now, we'll return the existing contract as updates aren't implemented in the model
+			// In a real implementation, you'd add an update method to ContractModel
+			res.json({
+				success: true,
+				data: contract.toJSON(),
+				message: "Contract update functionality not yet implemented",
+			});
+		} catch (error) {
+			console.error("Error updating contract:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+
+		return () => {};
+	}
+);
+
+// Delete contract
+router.delete(
+	"/:id",
+	authenticateToken,
+	validateContractId,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const errors = validationResult(req);
+			if (!errors.isEmpty()) {
+				return res.status(400).json({
+					success: false,
+					error: "Validation failed",
+					details: errors.array(),
+				});
+			}
+
+			const { id } = req.params;
+			const userId = req.user?.id;
+
+			if (!userId) {
+				return res.status(401).json({
+					success: false,
+					error: "User not authenticated",
+				});
+			}
+
+			const contract = await ContractModel.findById(id);
+
+			if (!contract) {
+				return res.status(404).json({
+					success: false,
+					error: "Contract not found",
+				});
+			}
+
+			// Check if user owns the contract
+			if (contract.user_id !== userId) {
+				return res.status(403).json({
+					success: false,
+					error: "Access denied",
+				});
+			}
+
+			// For now, we'll return success as delete isn't implemented in the model
+			// In a real implementation, you'd add a delete method to ContractModel
+			res.json({
+				success: true,
+				message: "Contract delete functionality not yet implemented",
+			});
+		} catch (error) {
+			console.error("Error deleting contract:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+
+		return () => {};
+	}
+);
+
+export default router;
