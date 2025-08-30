@@ -11,6 +11,7 @@ import { SlitherAnalyzer } from "./SlitherAnalyzer";
 import { AIAnalyzer, AIAnalysisOptions } from "./AIAnalyzer";
 import { DatabaseService } from "./database";
 import { WebSocketService } from "./WebSocketService";
+import EmailService from "./EmailService";
 import { Contract, Audit } from "../types/database";
 import { AuditProgress, AuditRequest } from "../types/audit";
 
@@ -21,9 +22,11 @@ export class AuditOrchestrator {
 	private slitherAnalyzer: SlitherAnalyzer;
 	private aiAnalyzer: AIAnalyzer;
 	private wsService: WebSocketService;
+	private emailService: EmailService;
 
 	constructor(wsService: WebSocketService) {
 		this.wsService = wsService;
+		this.emailService = new EmailService();
 
 		this.slitherAnalyzer = new SlitherAnalyzer({
 			timeout: 120000, // 2 minutes
@@ -175,6 +178,20 @@ export class AuditOrchestrator {
 				currentStep: "Queued for analysis",
 			});
 
+			// Send audit started email notification
+			try {
+				const user = await DatabaseService.getUserById(request.userId);
+				if (user?.email) {
+					await this.emailService.sendAuditStartedEmail(
+						user.email,
+						contract.name,
+						audit.id
+					);
+				}
+			} catch (emailError) {
+				console.warn("Failed to send audit started notification:", emailError);
+			}
+
 			return {
 				success: true,
 				auditId: audit.id,
@@ -292,16 +309,48 @@ export class AuditOrchestrator {
 				"Generating audit report"
 			);
 
+			let reportGenerated = false;
+			let pdfBuffer: Buffer | null = null;
+
 			try {
 				const { AuditReportService } = await import("./AuditReportService");
-				await AuditReportService.generateAuditReport({
+				const reportResult = await AuditReportService.generateAuditReport({
 					auditId,
 					format: "both",
 					reportType: "standard",
 					includeSourceCode: false,
 				});
+
+				if (reportResult.pdf?.filePath) {
+					const fs = await import("fs-extra");
+					pdfBuffer = await fs.readFile(reportResult.pdf.filePath);
+					reportGenerated = true;
+				}
 			} catch (reportError) {
 				console.warn("Failed to generate audit report:", reportError);
+			}
+
+			// Send email notification
+			await this.updateProgress(
+				job,
+				auditId,
+				userId,
+				"processing",
+				98,
+				"Sending notification"
+			);
+
+			try {
+				await this.sendAuditCompletionNotification(
+					auditId,
+					userId,
+					contractName,
+					staticResults.summary.totalVulnerabilities,
+					0, // Gas optimizations count - could be enhanced later
+					pdfBuffer
+				);
+			} catch (emailError) {
+				console.warn("Failed to send email notification:", emailError);
 			}
 
 			await this.updateProgress(
@@ -428,16 +477,46 @@ export class AuditOrchestrator {
 				"Generating audit report"
 			);
 
+			let pdfBuffer: Buffer | null = null;
+
 			try {
 				const { AuditReportService } = await import("./AuditReportService");
-				await AuditReportService.generateAuditReport({
+				const reportResult = await AuditReportService.generateAuditReport({
 					auditId,
 					format: "both",
 					reportType: "standard",
 					includeSourceCode: false,
 				});
+
+				if (reportResult.pdf?.filePath) {
+					const fs = await import("fs-extra");
+					pdfBuffer = await fs.readFile(reportResult.pdf.filePath);
+				}
 			} catch (reportError) {
 				console.warn("Failed to generate audit report:", reportError);
+			}
+
+			// Send email notification
+			await this.updateProgress(
+				job,
+				auditId,
+				userId,
+				"processing",
+				98,
+				"Sending notification"
+			);
+
+			try {
+				await this.sendAuditCompletionNotification(
+					auditId,
+					userId,
+					contractName,
+					aiResult.result?.vulnerabilities.length || 0,
+					0, // Gas optimizations count
+					pdfBuffer
+				);
+			} catch (emailError) {
+				console.warn("Failed to send email notification:", emailError);
 			}
 
 			await this.updateProgress(
@@ -460,6 +539,18 @@ export class AuditOrchestrator {
 			await DatabaseService.updateAudit(auditId, {
 				status: "failed",
 			});
+
+			// Send failure notification
+			try {
+				await this.sendAuditFailureNotification(
+					auditId,
+					userId,
+					contractName,
+					error instanceof Error ? error.message : "Unknown error"
+				);
+			} catch (emailError) {
+				console.warn("Failed to send failure email notification:", emailError);
+			}
 
 			await this.updateProgress(
 				job,
@@ -636,17 +727,116 @@ export class AuditOrchestrator {
 				"Generating audit report"
 			);
 
+			let pdfBuffer: Buffer | null = null;
+			let reportPath: string | null = null;
+
 			try {
 				const { AuditReportService } = await import("./AuditReportService");
-				await AuditReportService.generateAuditReport({
+				const reportResult = await AuditReportService.generateAuditReport({
 					auditId,
 					format: "both", // Generate both HTML and PDF
 					reportType: "standard",
 					includeSourceCode: false,
 				});
+
+				if (reportResult.pdf?.filePath) {
+					const fs = await import("fs-extra");
+					pdfBuffer = await fs.readFile(reportResult.pdf.filePath);
+					reportPath = reportResult.pdf.filePath;
+				}
+
+				// Store in decentralized storage if report was generated successfully
+				if (reportPath) {
+					await this.updateProgress(
+						job,
+						auditId,
+						userId,
+						"processing",
+						97,
+						"Storing in decentralized storage"
+					);
+
+					try {
+						const DecentralizedStorageService = (
+							await import("./DecentralizedStorageService")
+						).default;
+						const storageService = new DecentralizedStorageService();
+
+						const storageData = {
+							auditId,
+							contractAddress: undefined, // Will be filled from audit data
+							auditorAddress: userId,
+							reportPath,
+							auditData: {
+								staticResults,
+								aiResults: aiResult.success ? aiResult.result : null,
+								contractName,
+							},
+							metadata: {
+								name: `audit-${auditId}`,
+								description: `Comprehensive audit report for ${contractName}`,
+								timestamp: Date.now(),
+							},
+						};
+
+						const storageResult = await storageService.storeAuditReport(
+							storageData,
+							{
+								useIPFS: true,
+								useBlockchain: process.env.NODE_ENV === "production", // Only use blockchain in production
+								fallbackToDatabase: true,
+							}
+						);
+
+						if (storageResult.success) {
+							console.log(`Audit ${auditId} stored in decentralized storage:`, {
+								ipfs: !!storageResult.ipfsHash,
+								blockchain: !!storageResult.blockchainTxHash,
+							});
+						} else {
+							console.warn(
+								`Decentralized storage failed for audit ${auditId}:`,
+								storageResult.errors
+							);
+						}
+					} catch (storageError) {
+						console.warn(
+							"Failed to store in decentralized storage:",
+							storageError
+						);
+						// Don't fail the entire audit if decentralized storage fails
+					}
+				}
 			} catch (reportError) {
 				console.warn("Failed to generate audit report:", reportError);
 				// Don't fail the entire audit if report generation fails
+			}
+
+			// Send email notification
+			await this.updateProgress(
+				job,
+				auditId,
+				userId,
+				"processing",
+				98,
+				"Sending notification"
+			);
+
+			const totalVulnerabilities =
+				(slitherResult.vulnerabilities?.length || 0) +
+				(aiResult.result?.vulnerabilities.length || 0);
+
+			try {
+				await this.sendAuditCompletionNotification(
+					auditId,
+					userId,
+					contractName,
+					totalVulnerabilities,
+					0, // Gas optimizations count
+					pdfBuffer
+				);
+			} catch (emailError) {
+				console.warn("Failed to send email notification:", emailError);
 			}
 
 			await this.updateProgress(
@@ -670,6 +860,18 @@ export class AuditOrchestrator {
 			await DatabaseService.updateAudit(auditId, {
 				status: "failed",
 			});
+
+			// Send failure notification
+			try {
+				await this.sendAuditFailureNotification(
+					auditId,
+					userId,
+					contractName,
+					error instanceof Error ? error.message : "Unknown error"
+				);
+			} catch (emailError) {
+				console.warn("Failed to send failure email notification:", emailError);
+			}
 
 			await this.updateProgress(
 				job,
@@ -1030,6 +1232,83 @@ export class AuditOrchestrator {
 				success: false,
 				error: error instanceof Error ? error.message : "Unknown error",
 			};
+		}
+	}
+
+	/**
+	 * Send audit completion notification email
+	 */
+	private async sendAuditCompletionNotification(
+		auditId: string,
+		userId: string,
+		contractName: string,
+		vulnerabilityCount: number,
+		gasOptimizations: number,
+		pdfBuffer: Buffer | null
+	): Promise<void> {
+		try {
+			// Get user email from database
+			const user = await DatabaseService.getUserById(userId);
+			if (!user?.email) {
+				console.warn(`No email found for user ${userId}`);
+				return;
+			}
+
+			if (pdfBuffer) {
+				await this.emailService.sendAuditCompletionEmail(
+					user.email,
+					contractName,
+					auditId,
+					pdfBuffer,
+					vulnerabilityCount,
+					gasOptimizations
+				);
+			} else {
+				// Send notification without PDF if report generation failed
+				await this.emailService.sendEmail({
+					to: user.email,
+					subject: `Audit Complete: ${contractName}`,
+					html: `
+						<h2>Audit Complete</h2>
+						<p>Your smart contract audit for <strong>${contractName}</strong> has been completed.</p>
+						<p>Vulnerabilities found: ${vulnerabilityCount}</p>
+						<p>You can view the full report in your dashboard.</p>
+						<p><a href="${
+							process.env.FRONTEND_URL || "http://localhost:3000"
+						}/dashboard">View Dashboard</a></p>
+					`,
+				});
+			}
+		} catch (error) {
+			console.error("Failed to send audit completion notification:", error);
+		}
+	}
+
+	/**
+	 * Send audit failure notification email
+	 */
+	private async sendAuditFailureNotification(
+		auditId: string,
+		userId: string,
+		contractName: string,
+		errorMessage: string
+	): Promise<void> {
+		try {
+			// Get user email from database
+			const user = await DatabaseService.getUserById(userId);
+			if (!user?.email) {
+				console.warn(`No email found for user ${userId}`);
+				return;
+			}
+
+			await this.emailService.sendAuditFailureEmail(
+				user.email,
+				contractName,
+				auditId,
+				errorMessage
+			);
+		} catch (error) {
+			console.error("Failed to send audit failure notification:", error);
 		}
 	}
 }

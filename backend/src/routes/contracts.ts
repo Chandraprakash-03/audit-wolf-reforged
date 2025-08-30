@@ -2,47 +2,35 @@ import { Router, Response } from "express";
 import { ContractModel } from "../models/Contract";
 import { AnalysisService } from "../services/AnalysisService";
 import { authenticateToken, AuthenticatedRequest } from "../middleware/auth";
-import { body, param, validationResult } from "express-validator";
+import {
+	validateContractInput,
+	validateUUID,
+	validatePagination,
+	handleValidationErrors,
+	createRateLimit,
+} from "../middleware/security";
+import { encryptionService } from "../services/EncryptionService";
+import { validationResult } from "express-validator";
 
 const router = Router();
 const analysisService = new AnalysisService();
 
-// Validation middleware
-const validateContractCreation = [
-	body("name")
-		.trim()
-		.isLength({ min: 1, max: 100 })
-		.withMessage("Contract name must be between 1 and 100 characters"),
-	body("sourceCode")
-		.trim()
-		.isLength({ min: 1, max: 1000000 })
-		.withMessage("Source code must be between 1 and 1,000,000 characters"),
-	body("compilerVersion")
-		.optional()
-		.matches(/^\d+\.\d+(\.\d+)?$/)
-		.withMessage("Invalid compiler version format"),
-];
-
-const validateContractId = [
-	param("id").isUUID().withMessage("Invalid contract ID format"),
-];
+// Rate limiting for contract uploads (more restrictive)
+const contractUploadLimit = createRateLimit({
+	windowMs: 60 * 60 * 1000, // 1 hour
+	max: 20, // Limit contract uploads to 20 per hour
+	message: "Too many contract uploads, please try again later",
+});
 
 // Create a new contract
 router.post(
 	"/",
+	contractUploadLimit,
 	authenticateToken,
-	validateContractCreation,
+	validateContractInput,
+	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
-			const errors = validationResult(req);
-			if (!errors.isEmpty()) {
-				return res.status(400).json({
-					success: false,
-					error: "Validation failed",
-					details: errors.array(),
-				});
-			}
-
 			const { name, sourceCode, compilerVersion } = req.body;
 			const userId = req.user?.id;
 
@@ -53,6 +41,9 @@ router.post(
 				});
 			}
 
+			// Encrypt sensitive contract data
+			const encryptedContract = encryptionService.encryptContract(sourceCode);
+
 			// Validate Solidity code
 			const tempContract = new ContractModel({
 				id: "temp",
@@ -60,12 +51,15 @@ router.post(
 				name,
 				source_code: sourceCode,
 				compiler_version: compilerVersion || "0.8.0",
-				file_hash: "temp",
+				file_hash: encryptedContract.hash,
 				created_at: new Date(),
 			});
 
 			const validation = tempContract.validateSolidity();
 			if (!validation.isValid) {
+				// Securely delete decrypted source code from memory
+				encryptionService.secureDelete(sourceCode);
+
 				return res.status(400).json({
 					success: false,
 					error: "Invalid Solidity code",
@@ -73,13 +67,16 @@ router.post(
 				});
 			}
 
-			// Create the contract
+			// Create the contract with encrypted source code
 			const contract = await ContractModel.create({
 				user_id: userId,
 				name,
-				source_code: sourceCode,
+				source_code: JSON.stringify(encryptedContract), // Store encrypted data
 				compiler_version: compilerVersion || "0.8.0",
 			});
+
+			// Securely delete decrypted source code from memory
+			encryptionService.secureDelete(sourceCode);
 
 			if (!contract) {
 				return res.status(500).json({
@@ -174,6 +171,8 @@ router.post(
 router.get(
 	"/",
 	authenticateToken,
+	validatePagination,
+	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
 			const userId = req.user?.id;
@@ -206,7 +205,8 @@ router.get(
 router.get(
 	"/:id",
 	authenticateToken,
-	validateContractId,
+	validateUUID("id"),
+	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
 			const errors = validationResult(req);
@@ -264,7 +264,8 @@ router.get(
 router.patch(
 	"/:id",
 	authenticateToken,
-	validateContractId,
+	validateUUID("id"),
+	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
 			const errors = validationResult(req);
@@ -327,7 +328,8 @@ router.patch(
 router.delete(
 	"/:id",
 	authenticateToken,
-	validateContractId,
+	validateUUID("id"),
+	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
 			const errors = validationResult(req);

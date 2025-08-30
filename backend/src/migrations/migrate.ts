@@ -102,6 +102,70 @@ export class DatabaseMigrator {
 			};
 		}
 	}
+
+	static async runDecentralizedStorageMigration(): Promise<MigrationResult> {
+		try {
+			console.log("Running decentralized storage migration...");
+
+			// Check if columns already exist
+			const { data: auditSample, error: sampleError } = await supabase
+				.from("audits")
+				.select(
+					"ipfs_hash, ipfs_url, blockchain_tx_hash, blockchain_block_number, storage_type"
+				)
+				.limit(1);
+
+			if (!sampleError) {
+				console.log("✅ Decentralized storage columns already exist");
+				return {
+					success: true,
+					message: "Decentralized storage migration already applied",
+				};
+			}
+
+			// Run the migration SQL
+			const fs = await import("fs-extra");
+			const path = await import("path");
+
+			const migrationPath = path.join(
+				__dirname,
+				"002_add_decentralized_storage.sql"
+			);
+
+			if (await fs.pathExists(migrationPath)) {
+				const migrationSQL = await fs.readFile(migrationPath, "utf-8");
+
+				// Note: Supabase client doesn't support raw SQL execution
+				// This would need to be run manually in the Supabase Dashboard
+				console.log(
+					"📋 Please run the following SQL in Supabase Dashboard SQL Editor:"
+				);
+				console.log(
+					"📋 File: backend/src/migrations/002_add_decentralized_storage.sql"
+				);
+				console.log("📋 SQL Content:");
+				console.log(migrationSQL);
+
+				return {
+					success: false,
+					message:
+						"Please run the decentralized storage migration SQL manually in Supabase Dashboard",
+				};
+			} else {
+				return {
+					success: false,
+					message: "Migration file not found",
+					error: "002_add_decentralized_storage.sql not found",
+				};
+			}
+		} catch (error) {
+			return {
+				success: false,
+				message: "Failed to run decentralized storage migration",
+				error,
+			};
+		}
+	}
 }
 
 // CLI runner for migrations
@@ -114,6 +178,18 @@ if (require.main === module) {
 
 		if (verifyResult.success) {
 			console.log("🎉 Database tables verified successfully!");
+
+			// Check and run decentralized storage migration
+			const storageResult =
+				await DatabaseMigrator.runDecentralizedStorageMigration();
+
+			if (storageResult.success) {
+				console.log("🎉 Decentralized storage migration verified!");
+			} else {
+				console.log("📋 Decentralized storage migration needed:");
+				console.log(storageResult.message);
+			}
+
 			process.exit(0);
 		} else {
 			console.log(

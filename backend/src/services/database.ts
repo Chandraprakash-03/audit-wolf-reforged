@@ -1,6 +1,9 @@
 import { supabase } from "../config/supabase";
 import { User, Contract, Audit, Vulnerability } from "../types/database";
 
+// Export supabase for use in other services
+export { supabase };
+
 export class DatabaseService {
 	// User operations
 	static async createUser(userData: {

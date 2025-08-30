@@ -1,6 +1,11 @@
 import { Router, Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { authenticateToken, AuthenticatedRequest } from "../middleware/auth";
+import {
+	validateProfileUpdate,
+	handleValidationErrors,
+} from "../middleware/security";
+import { dataDeletionService } from "../services/DataDeletionService";
 
 const router = Router();
 
@@ -179,6 +184,8 @@ router.get(
 router.put(
 	"/profile",
 	authenticateToken,
+	validateProfileUpdate,
+	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
 			if (!req.user) {
@@ -188,23 +195,23 @@ router.put(
 				});
 			}
 
-			const { name } = req.body;
+			const { name, email } = req.body;
+			const updateData: any = {
+				updated_at: new Date().toISOString(),
+			};
 
-			// Validate input
-			if (!name || typeof name !== "string" || name.trim().length < 2) {
-				return res.status(400).json({
-					error: "Name must be at least 2 characters long",
-					code: "INVALID_NAME",
-				});
+			if (name) {
+				updateData.name = name.trim();
+			}
+
+			if (email) {
+				updateData.email = email.toLowerCase();
 			}
 
 			// Update user profile in database
 			const { data: userData, error } = await supabase
 				.from("users")
-				.update({
-					name: name.trim(),
-					updated_at: new Date().toISOString(),
-				})
+				.update(updateData)
 				.eq("id", req.user.id)
 				.select()
 				.single();
@@ -226,6 +233,105 @@ router.put(
 			res.status(500).json({
 				error: "Failed to update profile",
 				code: "PROFILE_UPDATE_ERROR",
+			});
+		}
+		return () => {};
+	}
+);
+
+/**
+ * DELETE /api/auth/account
+ * Permanently delete user account and all associated data
+ */
+router.delete(
+	"/account",
+	authenticateToken,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			if (!req.user) {
+				return res.status(401).json({
+					error: "User not authenticated",
+					code: "NOT_AUTHENTICATED",
+				});
+			}
+
+			const { confirmDeletion } = req.body;
+
+			if (confirmDeletion !== "DELETE_MY_ACCOUNT") {
+				return res.status(400).json({
+					error: "Account deletion must be confirmed with 'DELETE_MY_ACCOUNT'",
+					code: "DELETION_NOT_CONFIRMED",
+				});
+			}
+
+			// Perform secure data deletion
+			const deletionResult = await dataDeletionService.deleteUserData(
+				req.user.id
+			);
+
+			if (!deletionResult.success) {
+				return res.status(500).json({
+					error: "Failed to delete user data",
+					code: "DELETION_FAILED",
+					details: deletionResult.steps.filter((step) => !step.success),
+				});
+			}
+
+			res.json({
+				message:
+					"Account and all associated data have been permanently deleted",
+				deletionResult,
+			});
+		} catch (error) {
+			console.error("Account deletion error:", error);
+			res.status(500).json({
+				error: "Failed to delete account",
+				code: "ACCOUNT_DELETION_ERROR",
+			});
+		}
+		return () => {};
+	}
+);
+
+/**
+ * POST /api/auth/account/soft-delete
+ * Soft delete user account (mark as deleted but keep for recovery)
+ */
+router.post(
+	"/account/soft-delete",
+	authenticateToken,
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			if (!req.user) {
+				return res.status(401).json({
+					error: "User not authenticated",
+					code: "NOT_AUTHENTICATED",
+				});
+			}
+
+			// Perform soft deletion
+			const deletionResult = await dataDeletionService.softDeleteUserData(
+				req.user.id
+			);
+
+			if (!deletionResult.success) {
+				return res.status(500).json({
+					error: "Failed to soft delete user data",
+					code: "SOFT_DELETION_FAILED",
+					details: deletionResult.steps.filter((step) => !step.success),
+				});
+			}
+
+			res.json({
+				message:
+					"Account has been deactivated. Contact support within 30 days to recover.",
+				deletionResult,
+			});
+		} catch (error) {
+			console.error("Soft deletion error:", error);
+			res.status(500).json({
+				error: "Failed to deactivate account",
+				code: "SOFT_DELETION_ERROR",
 			});
 		}
 		return () => {};
