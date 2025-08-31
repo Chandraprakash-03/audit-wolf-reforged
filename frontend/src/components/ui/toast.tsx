@@ -68,7 +68,196 @@ export function useToast() {
 	if (!context) {
 		throw new Error("useToast must be used within a ToastProvider");
 	}
-	return context;
+
+	// Enhanced toast methods for common error scenarios
+	const enhancedToast = {
+		...context,
+
+		// Success notifications
+		success: (title: string, description?: string, duration?: number) => {
+			context.addToast({
+				type: "success",
+				title,
+				description,
+				duration,
+			});
+		},
+
+		// Error notifications
+		error: (
+			title: string,
+			description?: string,
+			action?: { label: string; onClick: () => void }
+		) => {
+			context.addToast({
+				type: "error",
+				title,
+				description,
+				duration: 0, // Don't auto-dismiss errors
+				action,
+			});
+		},
+
+		// Warning notifications
+		warning: (title: string, description?: string, duration?: number) => {
+			context.addToast({
+				type: "warning",
+				title,
+				description,
+				duration: duration ?? 7000,
+			});
+		},
+
+		// Info notifications
+		info: (title: string, description?: string, duration?: number) => {
+			context.addToast({
+				type: "info",
+				title,
+				description,
+				duration: duration ?? 5000,
+			});
+		},
+
+		// Network error handler
+		networkError: (error?: Error) => {
+			context.addToast({
+				type: "error",
+				title: "Connection Error",
+				description: "Please check your internet connection and try again.",
+				duration: 0,
+				action: {
+					label: "Retry",
+					onClick: () => window.location.reload(),
+				},
+			});
+		},
+
+		// API error handler
+		apiError: (error: any, defaultMessage = "An unexpected error occurred") => {
+			const message =
+				error?.response?.data?.error?.message ||
+				error?.message ||
+				defaultMessage;
+
+			const errorCode = error?.response?.data?.error?.code;
+			const requestId = error?.response?.data?.error?.requestId;
+
+			context.addToast({
+				type: "error",
+				title: "Request Failed",
+				description: message + (requestId ? ` (ID: ${requestId})` : ""),
+				duration: 0,
+				action:
+					errorCode === "RATE_LIMIT_EXCEEDED"
+						? {
+								label: "Learn More",
+								onClick: () => window.open("/docs/rate-limits", "_blank"),
+						  }
+						: undefined,
+			});
+		},
+
+		// Validation error handler
+		validationError: (errors: Array<{ field: string; message: string }>) => {
+			const errorList = errors
+				.map((e) => `${e.field}: ${e.message}`)
+				.join(", ");
+
+			context.addToast({
+				type: "error",
+				title: "Validation Failed",
+				description: errorList,
+				duration: 8000,
+			});
+		},
+
+		// Authentication error handler
+		authError: (message = "Authentication required") => {
+			context.addToast({
+				type: "warning",
+				title: "Authentication Required",
+				description: message,
+				duration: 0,
+				action: {
+					label: "Sign In",
+					onClick: () => (window.location.href = "/auth/login"),
+				},
+			});
+		},
+
+		// Permission error handler
+		permissionError: (
+			message = "You don't have permission to perform this action"
+		) => {
+			context.addToast({
+				type: "warning",
+				title: "Permission Denied",
+				description: message,
+				duration: 6000,
+			});
+		},
+
+		// Loading state with promise
+		promise<T>(
+			promise: Promise<T>,
+			options: {
+				loading?: string;
+				success?: string | ((data: T) => string);
+				error?: string | ((error: any) => string);
+			} = {}
+		): Promise<T> {
+			const {
+				loading = "Loading...",
+				success = "Success!",
+				error = "Something went wrong",
+			} = options;
+
+			return (async () => {
+				// Show loading toast
+				const loadingToast = {
+					id: Math.random().toString(36).substr(2, 9),
+					type: "info" as const,
+					title: loading,
+					duration: 0,
+				};
+
+				context.addToast(loadingToast);
+
+				try {
+					const result = await promise;
+
+					// Remove loading toast
+					context.removeToast(loadingToast.id);
+
+					// Show success toast
+					const successMessage =
+						typeof success === "function" ? success(result) : success;
+					context.addToast({
+						type: "success",
+						title: successMessage,
+						duration: 4000,
+					});
+
+					return result;
+				} catch (err) {
+					// Remove loading toast
+					context.removeToast(loadingToast.id);
+
+					// Show error toast
+					const errorMessage = typeof error === "function" ? error(err) : error;
+					context.addToast({
+						type: "error",
+						title: errorMessage,
+						duration: 0,
+					});
+
+					throw err;
+				}
+			})();
+		},
+	};
+
+	return enhancedToast;
 }
 
 function ToastContainer() {

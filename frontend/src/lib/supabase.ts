@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 // Supabase configuration for client-side operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -11,12 +11,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create Supabase client for frontend operations
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-	auth: {
-		autoRefreshToken: true,
-		persistSession: true,
-		detectSessionInUrl: true,
-	},
-});
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 export default supabase;

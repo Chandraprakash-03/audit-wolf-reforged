@@ -1,4 +1,5 @@
 import { ApiResponse, Audit, AuditReport, PaginatedResponse } from "@/types";
+import { supabase } from "@/lib/supabase";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -21,7 +22,11 @@ class AuditService {
 		options: RequestInit = {}
 	): Promise<ApiResponse<T>> {
 		try {
-			const token = localStorage.getItem("auth_token");
+			// Get the current session token from Supabase
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
+			const token = session?.access_token;
 
 			const response = await fetch(`${API_BASE_URL}${endpoint}`, {
 				...options,
@@ -96,7 +101,11 @@ class AuditService {
 		format: "pdf" | "json" = "pdf"
 	): Promise<ApiResponse<Blob>> {
 		try {
-			const token = localStorage.getItem("auth_token");
+			// Get the current session token from Supabase
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
+			const token = session?.access_token;
 
 			const response = await fetch(
 				`${API_BASE_URL}/api/audits/${auditId}/report/download?format=${format}`,

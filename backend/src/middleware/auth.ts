@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { supabase } from "../config/supabase";
+import { DatabaseService } from "../services/database";
 
 export interface AuthenticatedRequest extends Request {
 	user?: {
@@ -23,8 +24,16 @@ export const authenticateToken = async (
 
 		if (!token) {
 			return res.status(401).json({
-				error: "Access token required",
-				code: "MISSING_TOKEN",
+				success: false,
+				error: {
+					code: "MISSING_TOKEN",
+					message: "Access token required",
+					recovery: [
+						"Please log in to access this resource",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
 		}
 
@@ -36,9 +45,45 @@ export const authenticateToken = async (
 
 		if (error || !user) {
 			return res.status(401).json({
-				error: "Invalid or expired token",
-				code: "INVALID_TOKEN",
+				success: false,
+				error: {
+					code: "INVALID_TOKEN",
+					message: "Invalid or expired token",
+					recovery: [
+						"Please log in again",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
+		}
+
+		// Ensure user exists in our database
+		let dbUser = await DatabaseService.getUserById(user.id);
+		if (!dbUser) {
+			// Create user in our database if they don't exist
+			dbUser = await DatabaseService.createUser({
+				id: user.id,
+				email: user.email!,
+				name: user.user_metadata?.name || user.email!.split("@")[0],
+				subscription_tier: "free",
+				api_credits: 10,
+			});
+
+			if (!dbUser) {
+				console.error("Failed to create user in database:", user.id);
+				return res.status(500).json({
+					success: false,
+					error: {
+						code: "USER_CREATION_ERROR",
+						message: "Failed to create user account",
+						recovery: [
+							"Please try logging in again",
+							"Contact support if the issue persists",
+						],
+					},
+				});
+			}
 		}
 
 		// Add user info to request object
@@ -52,8 +97,12 @@ export const authenticateToken = async (
 	} catch (error) {
 		console.error("Authentication error:", error);
 		return res.status(500).json({
-			error: "Authentication failed",
-			code: "AUTH_ERROR",
+			success: false,
+			error: {
+				code: "AUTH_ERROR",
+				message: "Authentication failed",
+				recovery: ["Please try again", "Contact support if the issue persists"],
+			},
 		});
 	}
 	return () => {};

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Contract, PaginatedResponse, Audit } from "@/types";
 import { AuditFilters } from "./AuditFilters";
 import { AuditTable } from "./AuditTable";
@@ -16,6 +16,13 @@ export function AuditDashboard() {
 	const [contracts, setContracts] = useState<Contract[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+
+	// Debug: Log component state
+	console.log("AuditDashboard state:", {
+		audits: audits.length,
+		loading,
+		error,
+	});
 	const [filters, setFilters] = useState<AuditFiltersType>({
 		page: 1,
 		limit: 10,
@@ -67,10 +74,16 @@ export function AuditDashboard() {
 
 				setAudits(auditsWithContracts);
 			} else {
-				setError(auditsResponse.error || "Failed to load audits");
+				const errorMessage =
+					typeof auditsResponse.error === "string"
+						? auditsResponse.error
+						: auditsResponse.error?.message || "Failed to load audits";
+				setError(errorMessage);
 			}
 		} catch (err) {
-			setError("Error loading data");
+			const errorMessage =
+				err instanceof Error ? err.message : "Error loading data";
+			setError(errorMessage);
 			console.error("Error loading audit data:", err);
 		} finally {
 			setLoading(false);
@@ -118,6 +131,19 @@ export function AuditDashboard() {
 			</div>
 		);
 	}
+
+	// Safety check to prevent rendering error objects
+	const safeRender = (content: any) => {
+		if (
+			typeof content === "object" &&
+			content !== null &&
+			!React.isValidElement(content)
+		) {
+			console.warn("Attempted to render object as React child:", content);
+			return JSON.stringify(content);
+		}
+		return content;
+	};
 
 	return (
 		<div className="space-y-6">

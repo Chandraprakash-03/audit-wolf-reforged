@@ -7,20 +7,28 @@ export { supabase };
 export class DatabaseService {
 	// User operations
 	static async createUser(userData: {
+		id?: string;
 		email: string;
 		name: string;
 		subscription_tier?: "free" | "pro" | "enterprise";
 		api_credits?: number;
 	}): Promise<User | null> {
 		try {
+			const insertData: any = {
+				email: userData.email,
+				name: userData.name,
+				subscription_tier: userData.subscription_tier || "free",
+				api_credits: userData.api_credits || 10,
+			};
+
+			// If ID is provided, include it in the insert
+			if (userData.id) {
+				insertData.id = userData.id;
+			}
+
 			const { data, error } = await (supabase as any)
 				.from("users")
-				.insert({
-					email: userData.email,
-					name: userData.name,
-					subscription_tier: userData.subscription_tier || "free",
-					api_credits: userData.api_credits || 10,
-				})
+				.insert(insertData)
 				.select()
 				.single();
 

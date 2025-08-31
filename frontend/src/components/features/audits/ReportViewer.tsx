@@ -31,7 +31,11 @@ export function ReportViewer({ audit, onClose }: ReportViewerProps) {
 			if (response.success && response.data) {
 				setReport(response.data);
 			} else {
-				setError(response.error || "Failed to load report");
+				const errorMessage =
+					typeof response.error === "string"
+						? response.error
+						: response.error?.message || "Failed to load report";
+				setError(errorMessage);
 			}
 		} catch (err) {
 			setError("Error loading report");

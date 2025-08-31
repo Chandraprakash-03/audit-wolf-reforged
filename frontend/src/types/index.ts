@@ -45,7 +45,16 @@ export interface Theme {
 export interface ApiResponse<T = unknown> {
 	success: boolean;
 	data?: T;
-	error?: string;
+	error?:
+		| string
+		| {
+				code: string;
+				message: string;
+				recovery?: string[];
+				timestamp?: string;
+				requestId?: string;
+				stack?: string;
+		  };
 	message?: string;
 }
 

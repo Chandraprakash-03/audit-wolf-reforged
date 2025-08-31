@@ -148,13 +148,15 @@ export class EncryptionService {
 
 	/**
 	 * Securely delete sensitive data from memory
+	 * Note: Strings in JavaScript are immutable, so we can't actually overwrite them
+	 * This method is kept for API compatibility but doesn't perform actual memory overwriting for strings
 	 */
 	secureDelete(data: any): void {
 		if (typeof data === "string") {
-			// Overwrite string memory (best effort)
-			for (let i = 0; i < data.length; i++) {
-				(data as any)[i] = "\0";
-			}
+			// Strings are immutable in JavaScript, so we can't actually overwrite them
+			// The garbage collector will eventually clean up the memory
+			// This is a limitation of JavaScript's memory management
+			return;
 		} else if (Buffer.isBuffer(data)) {
 			data.fill(0);
 		} else if (typeof data === "object" && data !== null) {

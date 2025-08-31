@@ -29,12 +29,10 @@ import request from "supertest";
 import express from "express";
 import authRoutes from "../routes/auth";
 import { supabase } from "../config/supabase";
-import { it } from "node:test";
-import { describe } from "node:test";
-import { beforeEach } from "node:test";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/auth", authRoutes);
 
 describe("Auth Routes", () => {
@@ -98,8 +96,16 @@ describe("Auth Routes", () => {
 				.expect(401);
 
 			expect(response.body).toEqual({
-				error: "Invalid or expired token",
-				code: "INVALID_TOKEN",
+				success: false,
+				error: {
+					code: "INVALID_TOKEN",
+					message: "Invalid or expired token",
+					recovery: [
+						"Please log in again",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
 		});
 
@@ -107,8 +113,16 @@ describe("Auth Routes", () => {
 			const response = await request(app).post("/api/auth/verify").expect(401);
 
 			expect(response.body).toEqual({
-				error: "Access token required",
-				code: "MISSING_TOKEN",
+				success: false,
+				error: {
+					code: "MISSING_TOKEN",
+					message: "Access token required",
+					recovery: [
+						"Please log in to access this resource",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
 		});
 	});
@@ -130,6 +144,7 @@ describe("Auth Routes", () => {
 
 			const response = await request(app)
 				.post("/api/auth/refresh")
+				.set("Content-Type", "application/json")
 				.send({ refresh_token: "valid-refresh-token" })
 				.expect(200);
 
@@ -144,6 +159,7 @@ describe("Auth Routes", () => {
 		it("should return 400 when refresh token is missing", async () => {
 			const response = await request(app)
 				.post("/api/auth/refresh")
+				.set("Content-Type", "application/json")
 				.send({})
 				.expect(400);
 
@@ -161,6 +177,7 @@ describe("Auth Routes", () => {
 
 			const response = await request(app)
 				.post("/api/auth/refresh")
+				.set("Content-Type", "application/json")
 				.send({ refresh_token: "invalid-refresh-token" })
 				.expect(401);
 
@@ -219,8 +236,16 @@ describe("Auth Routes", () => {
 			const response = await request(app).get("/api/auth/me").expect(401);
 
 			expect(response.body).toEqual({
-				error: "Access token required",
-				code: "MISSING_TOKEN",
+				success: false,
+				error: {
+					code: "MISSING_TOKEN",
+					message: "Access token required",
+					recovery: [
+						"Please log in to access this resource",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
 		});
 
@@ -294,8 +319,16 @@ describe("Auth Routes", () => {
 			const response = await request(app).post("/api/auth/signout").expect(401);
 
 			expect(response.body).toEqual({
-				error: "Access token required",
-				code: "MISSING_TOKEN",
+				success: false,
+				error: {
+					code: "MISSING_TOKEN",
+					message: "Access token required",
+					recovery: [
+						"Please log in to access this resource",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
 		});
 	});
@@ -338,6 +371,7 @@ describe("Auth Routes", () => {
 			const response = await request(app)
 				.put("/api/auth/profile")
 				.set("Authorization", "Bearer valid-token")
+				.set("Content-Type", "application/json")
 				.send({ name: "Updated Name" })
 				.expect(200);
 
@@ -362,24 +396,33 @@ describe("Auth Routes", () => {
 			const response = await request(app)
 				.put("/api/auth/profile")
 				.set("Authorization", "Bearer valid-token")
+				.set("Content-Type", "application/json")
 				.send({ name: "A" }) // Too short
 				.expect(400);
 
-			expect(response.body).toEqual({
-				error: "Name must be at least 2 characters long",
-				code: "INVALID_NAME",
-			});
+			expect(response.body.error).toBe("Validation failed");
+			expect(response.body.code).toBe("VALIDATION_ERROR");
+			expect(response.body.details).toBeDefined();
 		});
 
 		it("should return 401 when no token provided", async () => {
 			const response = await request(app)
 				.put("/api/auth/profile")
+				.set("Content-Type", "application/json")
 				.send({ name: "Valid Name" })
 				.expect(401);
 
 			expect(response.body).toEqual({
-				error: "Access token required",
-				code: "MISSING_TOKEN",
+				success: false,
+				error: {
+					code: "MISSING_TOKEN",
+					message: "Access token required",
+					recovery: [
+						"Please log in to access this resource",
+						"Check if your session has expired",
+						"Verify your authentication credentials",
+					],
+				},
 			});
 		});
 
@@ -413,6 +456,7 @@ describe("Auth Routes", () => {
 			const response = await request(app)
 				.put("/api/auth/profile")
 				.set("Authorization", "Bearer valid-token")
+				.set("Content-Type", "application/json")
 				.send({ name: "Valid Name" })
 				.expect(500);
 

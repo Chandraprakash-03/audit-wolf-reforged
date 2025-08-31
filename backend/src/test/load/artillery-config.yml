@@ -1,0 +1,293 @@
+config:
+  target: "http://localhost:3001"
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm-up"
+
+    # Ramp-up phase
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 50
+      name: "Ramp-up"
+
+    # Sustained load phase
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load"
+
+    # Peak load phase
+    - duration: 60
+      arrivalRate: 100
+      name: "Peak load"
+
+    # Cool-down phase
+    - duration: 30
+      arrivalRate: 10
+      name: "Cool-down"
+
+  # Global configuration
+  timeout: 30
+
+  # Variables for dynamic data
+  variables:
+    contractNames:
+      - "LoadTestToken"
+      - "StressTestContract"
+      - "PerformanceContract"
+      - "ScalabilityTest"
+
+    analysisTypes:
+      - "static"
+      - "ai"
+      - "full"
+
+    priorities:
+      - 1
+      - 5
+      - 10
+      - 15
+
+  # Plugins for enhanced reporting
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+
+    # Publish metrics to console
+    publish-metrics:
+      - type: cloudwatch
+        region: us-east-1
+        namespace: AuditWolf/LoadTest
+        enabled: false # Enable if using AWS CloudWatch
+
+    # Memory and CPU monitoring
+    hdrhistogram: {}
+
+  # Custom functions
+  processor: "./load-test-functions.js"
+
+scenarios:
+  # Authentication flow load test
+  - name: "Authentication Load Test"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/auth/register"
+          json:
+            email: "loadtest-{{ $randomString() }}@example.com"
+            password: "testpassword123"
+            name: "Load Test User {{ $randomString() }}"
+          capture:
+            - json: "$.data.token"
+              as: "authToken"
+            - json: "$.data.user.id"
+              as: "userId"
+          expect:
+            - statusCode: 201
+
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "testpassword123"
+          expect:
+            - statusCode: 200
+
+  # Contract management load test
+  - name: "Contract Management Load Test"
+    weight: 30
+    flow:
+      # Register user first
+      - post:
+          url: "/api/auth/register"
+          json:
+            email: "contract-test-{{ $randomString() }}@example.com"
+            password: "testpassword123"
+            name: "Contract Test User"
+          capture:
+            - json: "$.data.token"
+              as: "authToken"
+            - json: "$.data.user.id"
+              as: "userId"
+
+      # Create contract
+      - post:
+          url: "/api/contracts"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            name: "{{ $randomString() }}-{{ contractNames }}"
+            sourceCode: |
+              pragma solidity ^0.8.0;
+              contract {{ contractNames }} {
+                  uint256 public value = {{ $randomInt(1, 1000) }};
+                  function setValue(uint256 _value) public {
+                      value = _value;
+                  }
+              }
+            compilerVersion: "0.8.19"
+          capture:
+            - json: "$.data.id"
+              as: "contractId"
+          expect:
+            - statusCode: 201
+
+      # Validate contract
+      - post:
+          url: "/api/contracts/validate"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            sourceCode: |
+              pragma solidity ^0.8.0;
+              contract TestContract {
+                  uint256 public testValue = 42;
+              }
+          expect:
+            - statusCode: 200
+
+      # Get contracts
+      - get:
+          url: "/api/contracts"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+      # Get specific contract
+      - get:
+          url: "/api/contracts/{{ contractId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # Analysis workflow load test
+  - name: "Analysis Workflow Load Test"
+    weight: 40
+    flow:
+      # Setup user and contract
+      - post:
+          url: "/api/auth/register"
+          json:
+            email: "analysis-test-{{ $randomString() }}@example.com"
+            password: "testpassword123"
+            name: "Analysis Test User"
+          capture:
+            - json: "$.data.token"
+              as: "authToken"
+            - json: "$.data.user.id"
+              as: "userId"
+
+      - post:
+          url: "/api/contracts"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            name: "AnalysisContract-{{ $randomString() }}"
+            sourceCode: |
+              pragma solidity ^0.8.0;
+              contract AnalysisContract {
+                  mapping(address => uint256) public balances;
+                  function transfer(address to, uint256 amount) public {
+                      require(balances[msg.sender] >= amount);
+                      balances[msg.sender] -= amount;
+                      balances[to] += amount;
+                  }
+              }
+            compilerVersion: "0.8.19"
+          capture:
+            - json: "$.data.id"
+              as: "contractId"
+
+      # Start analysis
+      - post:
+          url: "/api/analysis/start"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            contractId: "{{ contractId }}"
+            analysisType: "{{ analysisTypes }}"
+            priority: "{{ priorities }}"
+          capture:
+            - json: "$.data.auditId"
+              as: "auditId"
+          expect:
+            - statusCode: 201
+
+      # Check progress multiple times
+      - loop:
+          count: 3
+          over:
+            - get:
+                url: "/api/analysis/{{ auditId }}/progress"
+                headers:
+                  Authorization: "Bearer {{ authToken }}"
+                expect:
+                  - statusCode: 200
+            - think: 2 # Wait 2 seconds between checks
+
+      # Check system health
+      - get:
+          url: "/api/analysis/health"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # Report generation load test
+  - name: "Report Generation Load Test"
+    weight: 10
+    flow:
+      # Setup (simplified for load testing)
+      - function: "setupUserAndAudit"
+
+      # Generate report
+      - post:
+          url: "/api/reports/generate"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            auditId: "{{ auditId }}"
+            format: "html"
+            reportType: "standard"
+          expect:
+            - statusCode: 200
+
+      # Get report info
+      - get:
+          url: "/api/reports/{{ auditId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # Error handling scenarios
+  - name: "Error Handling Load Test"
+    weight: 5
+    flow:
+      # Test rate limiting
+      - loop:
+          count: 30
+          over:
+            - post:
+                url: "/api/contracts/validate"
+                json:
+                  sourceCode: "invalid code"
+                expect:
+                  - statusCode: [400, 429] # Either validation error or rate limit
+
+      # Test invalid requests
+      - post:
+          url: "/api/contracts"
+          json:
+            invalid: "data"
+          expect:
+            - statusCode: [400, 401]
+
+      # Test non-existent resources
+      - get:
+          url: "/api/contracts/00000000-0000-0000-0000-000000000000"
+          expect:
+            - statusCode: [401, 404]

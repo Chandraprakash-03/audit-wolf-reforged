@@ -10,6 +10,159 @@ import { dataDeletionService } from "../services/DataDeletionService";
 const router = Router();
 
 /**
+ * POST /api/auth/register
+ * Register a new user
+ */
+router.post("/register", async (req: Request, res: Response) => {
+	try {
+		const { email, password, name } = req.body;
+
+		if (!email || !password) {
+			return res.status(400).json({
+				success: false,
+				error: "Email and password are required",
+				code: "MISSING_CREDENTIALS",
+			});
+		}
+
+		// Register user with Supabase Auth
+		const { data: authData, error: authError } = await supabase.auth.signUp({
+			email: email.toLowerCase(),
+			password,
+			options: {
+				data: {
+					name: name || null,
+				},
+			},
+		});
+
+		if (authError) {
+			return res.status(400).json({
+				success: false,
+				error: authError.message,
+				code: "REGISTRATION_FAILED",
+			});
+		}
+
+		if (!authData.user) {
+			return res.status(400).json({
+				success: false,
+				error: "User registration failed",
+				code: "USER_CREATION_FAILED",
+			});
+		}
+
+		// Create user record in our database
+		const { data: userData, error: dbError } = await supabase
+			.from("users")
+			.insert({
+				id: authData.user.id,
+				email: email.toLowerCase(),
+				name: name || null,
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+			})
+			.select()
+			.single();
+
+		if (dbError) {
+			console.error("Error creating user record:", dbError);
+			// Continue anyway, as the auth user was created successfully
+		}
+
+		res.status(201).json({
+			success: true,
+			data: {
+				user: {
+					id: authData.user.id,
+					email: authData.user.email,
+					name: name || null,
+				},
+				token: authData.session?.access_token,
+				refresh_token: authData.session?.refresh_token,
+			},
+		});
+	} catch (error) {
+		console.error("Registration error:", error);
+		res.status(500).json({
+			success: false,
+			error: "Registration failed",
+			code: "REGISTRATION_ERROR",
+		});
+	}
+	return () => {};
+});
+
+/**
+ * POST /api/auth/login
+ * Login user
+ */
+router.post("/login", async (req: Request, res: Response) => {
+	try {
+		const { email, password } = req.body;
+
+		if (!email || !password) {
+			return res.status(400).json({
+				success: false,
+				error: "Email and password are required",
+				code: "MISSING_CREDENTIALS",
+			});
+		}
+
+		// Sign in with Supabase Auth
+		const { data: authData, error: authError } =
+			await supabase.auth.signInWithPassword({
+				email: email.toLowerCase(),
+				password,
+			});
+
+		if (authError) {
+			return res.status(401).json({
+				success: false,
+				error: authError.message,
+				code: "LOGIN_FAILED",
+			});
+		}
+
+		if (!authData.user || !authData.session) {
+			return res.status(401).json({
+				success: false,
+				error: "Invalid credentials",
+				code: "INVALID_CREDENTIALS",
+			});
+		}
+
+		// Get user data from our database
+		const { data: userData } = await supabase
+			.from("users")
+			.select("*")
+			.eq("id", authData.user.id)
+			.single();
+
+		res.status(200).json({
+			success: true,
+			data: {
+				user: {
+					id: authData.user.id,
+					email: authData.user.email,
+					name: userData?.name || null,
+				},
+				token: authData.session.access_token,
+				refresh_token: authData.session.refresh_token,
+			},
+		});
+	} catch (error) {
+		console.error("Login error:", error);
+		res.status(500).json({
+			success: false,
+			error: "Login failed",
+			code: "LOGIN_ERROR",
+		});
+	}
+	return () => {};
+});
+
+/**
  * POST /api/auth/verify
  * Verify JWT token and return user info
  */

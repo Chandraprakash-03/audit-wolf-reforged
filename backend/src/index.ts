@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { createServer } from "http";
 import authRoutes from "./routes/auth";
 import contractRoutes from "./routes/contracts";
+import auditRoutes from "./routes/audits";
 import analysisRoutes from "./routes/analysis";
 import queueRoutes from "./routes/queue";
 import reportRoutes from "./routes/reports";
@@ -16,6 +17,7 @@ import { WebSocketService } from "./services/WebSocketService";
 import { AuditOrchestrator } from "./services/AuditOrchestrator";
 import { dbOptimizationService } from "./services/DatabaseOptimizationService";
 import { cdnService } from "./services/CDNService";
+import { healthCheckService } from "./services/HealthCheckService";
 import {
 	sanitizeInput,
 	createRateLimit,
@@ -31,9 +33,30 @@ import {
 	memoryTrackingMiddleware,
 	rateLimitMiddleware,
 } from "./middleware/performanceMiddleware";
+import {
+	globalErrorHandler,
+	notFoundHandler,
+	handleUnhandledRejection,
+	handleUncaughtException,
+} from "./middleware/errorHandler";
+import {
+	initializeSentry,
+	sentryRequestHandler,
+	sentryTracingHandler,
+	sentryErrorHandler,
+} from "./config/sentry";
+import { logger, morganStream } from "./utils/logger";
+import { setupSwagger } from "./docs/swagger";
 
 // Load environment variables
 dotenv.config();
+
+// Initialize Sentry for error tracking
+initializeSentry();
+
+// Handle unhandled promise rejections and uncaught exceptions
+process.on("unhandledRejection", handleUnhandledRejection);
+process.on("uncaughtException", handleUncaughtException);
 
 const app = express();
 const server = createServer(app);
@@ -52,6 +75,10 @@ app.locals.auditOrchestrator = auditOrchestrator;
 // Trust proxy for rate limiting and IP detection
 app.set("trust proxy", 1);
 
+// Sentry request handling (must be first)
+app.use(sentryRequestHandler);
+app.use(sentryTracingHandler);
+
 // Security middleware
 app.use(requestId);
 app.use(securityHeaders);
@@ -69,8 +96,8 @@ if (process.env.NODE_ENV === "production") {
 	app.use(cors());
 }
 
-// Request logging
-app.use(morgan("combined"));
+// Request logging with Winston
+app.use(morgan("combined", { stream: morganStream }));
 
 // Global rate limiting
 app.use(
@@ -90,7 +117,7 @@ app.use(
 	})
 );
 
-// Body parsing with size limits
+// Body parsing with size limits and error handling
 app.use(
 	express.json({
 		limit: "10mb",
@@ -101,6 +128,29 @@ app.use(
 	})
 );
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Handle JSON parsing errors
+app.use((err: any, req: any, res: any, next: any) => {
+	if (
+		err instanceof SyntaxError &&
+		(err as any).status === 400 &&
+		"body" in err
+	) {
+		return res.status(400).json({
+			success: false,
+			error: {
+				code: "INVALID_JSON",
+				message: "Invalid JSON format",
+				recovery: [
+					"Please check the JSON syntax",
+					"Ensure all quotes and brackets are properly closed",
+					"Validate your JSON using a JSON validator",
+				],
+			},
+		});
+	}
+	next(err);
+});
 
 // Input sanitization
 app.use(sanitizeInput);
@@ -115,10 +165,22 @@ app.use(cdnService.staticAssetMiddleware());
 // Initialize database optimizations on startup
 dbOptimizationService.createOptimizedIndexes().catch(console.error);
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-	res.json({ status: "OK", timestamp: new Date().toISOString() });
-});
+// Health check endpoints
+app.get(
+	"/health",
+	healthCheckService.healthCheckHandler.bind(healthCheckService)
+);
+app.get(
+	"/health/live",
+	healthCheckService.livenessProbe.bind(healthCheckService)
+);
+app.get(
+	"/health/ready",
+	healthCheckService.readinessProbe.bind(healthCheckService)
+);
+
+// Setup API documentation
+setupSwagger(app);
 
 // API routes
 app.get("/api", (req, res) => {
@@ -145,6 +207,17 @@ app.use(
 		message: "Too many contract operations, please try again later",
 	}),
 	contractRoutes
+);
+
+// Audit routes with rate limiting
+app.use(
+	"/api/audits",
+	createRateLimit({
+		windowMs: 15 * 60 * 1000, // 15 minutes
+		max: 100, // Limit audit operations to 100 per 15 minutes
+		message: "Too many audit operations, please try again later",
+	}),
+	auditRoutes
 );
 
 // Analysis routes with stricter rate limiting (resource intensive)
@@ -177,33 +250,41 @@ app.use(
 	adminRoutes
 );
 
-// Error handling middleware
+// Error handling middleware (must be after all routes)
 app.use(errorTrackingMiddleware);
-app.use(
-	(
-		err: Error,
-		req: express.Request,
-		res: express.Response,
-		next: express.NextFunction
-	) => {
-		console.error(err.stack);
-		res.status(500).json({ error: "Something went wrong!" });
-	}
-);
+app.use(sentryErrorHandler);
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
-// 404 handler
-app.use("*", (req, res) => {
-	res.status(404).json({ error: "Route not found" });
-});
+// Only start server if not in test environment
+if (process.env.NODE_ENV !== "test") {
+	server.listen(PORT, () => {
+		logger.info("Audit Wolf Backend started", {
+			port: PORT,
+			environment: process.env.NODE_ENV,
+			version: process.env.npm_package_version || "1.0.0",
+			features: {
+				websocket: true,
+				queue: true,
+				performance_monitoring: true,
+				database_optimization: true,
+				cdn: true,
+				error_tracking: !!process.env.SENTRY_DSN,
+			},
+		});
 
-server.listen(PORT, () => {
-	console.log(`🚀 Audit Wolf Backend running on port ${PORT}`);
-	console.log(`📡 WebSocket server ready for connections`);
-	console.log(`⚡ Queue system initialized`);
-	console.log(`📊 Performance monitoring enabled`);
-	console.log(`🗄️ Database optimization enabled`);
-	console.log(`🚀 CDN service initialized`);
-});
+		console.log(`🚀 Audit Wolf Backend running on port ${PORT}`);
+		console.log(`📡 WebSocket server ready for connections`);
+		console.log(`⚡ Queue system initialized`);
+		console.log(`📊 Performance monitoring enabled`);
+		console.log(`🗄️ Database optimization enabled`);
+		console.log(`🚀 CDN service initialized`);
+		console.log(
+			`🔍 Error tracking ${process.env.SENTRY_DSN ? "enabled" : "disabled"}`
+		);
+		console.log(`📝 Logging to files enabled`);
+	});
+}
 
 // Export app for testing
 export { app };

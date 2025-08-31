@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation"; // Add this import
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ export function LoginForm({
 	const [isLoading, setIsLoading] = useState(false);
 
 	const { signIn } = useAuth();
+	const router = useRouter(); // Add this
 
 	const validateForm = () => {
 		const newErrors: { email?: string; password?: string } = {};
@@ -67,12 +69,8 @@ export function LoginForm({
 		try {
 			console.log("Attempting to sign in with:", email);
 			await signIn(email, password);
-			console.log(
-				"Sign in successful, redirect will be handled by auth state change"
-			);
-
-			// Don't redirect here - let the auth state change handler in useAuth do it
-			// This prevents race conditions and ensures the session is properly established
+			console.log("Sign in successful, redirecting...");
+			router.push(redirectTo); // Use client-side navigation here
 		} catch (error) {
 			console.error("Login error:", error);
 			setErrors({

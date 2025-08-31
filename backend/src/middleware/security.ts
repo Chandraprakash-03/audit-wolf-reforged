@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import slowDown from "express-slow-down";
 import { body, param, query, validationResult } from "express-validator";
 import DOMPurify from "isomorphic-dompurify";
@@ -124,11 +124,11 @@ export const createRateLimit = (options: {
 		standardHeaders: true,
 		legacyHeaders: false,
 		skipSuccessfulRequests: options.skipSuccessfulRequests || false,
-		keyGenerator: (req: { ip: any; connection: { remoteAddress: any } }) => {
-			// Use IP + user ID if authenticated for more granular rate limiting
-			const ip = req.ip || req.connection.remoteAddress || "unknown";
-			const userId = (req as any).user?.id || "";
-			return `${ip}:${userId}`;
+		keyGenerator: (req: any) => {
+			// Use proper IPv6-safe IP key generator + user ID if authenticated
+			const ipKey = ipKeyGenerator(req);
+			const userId = req.user?.id || "";
+			return `${ipKey}:${userId}`;
 		},
 	});
 };

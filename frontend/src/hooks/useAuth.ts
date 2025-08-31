@@ -78,22 +78,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			});
 
 			// Handle redirects after successful authentication
-			if (event === "SIGNED_IN" && user) {
-				console.log("User signed in successfully:", user.email);
+			// if (event === "SIGNED_IN" && user) {
+			// 	console.log("User signed in successfully:", user.email);
 
-				// Check if we're on an auth page and should redirect
-				const currentPath = window.location.pathname;
-				const isAuthPage = currentPath.startsWith("/auth/");
+			// 	// Check if we're on an auth page and should redirect
+			// 	const currentPath = window.location.pathname;
+			// 	const isAuthPage = currentPath.startsWith("/auth/");
 
-				if (isAuthPage) {
-					// Get redirect URL from query params or default to dashboard
-					const urlParams = new URLSearchParams(window.location.search);
-					const redirectTo = urlParams.get("redirectTo") || "/dashboard";
+			// 	if (isAuthPage) {
+			// 		// Get redirect URL from query params or default to dashboard
+			// 		const urlParams = new URLSearchParams(window.location.search);
+			// 		const redirectTo = urlParams.get("redirectTo") || "/dashboard";
 
-					// Use router.push for client-side navigation
-					window.location.href = redirectTo;
-				}
-			}
+			// 		// Use router.push for client-side navigation
+			// 		window.location.href = redirectTo;
+			// 	}
+			// }
 		});
 
 		return () => {

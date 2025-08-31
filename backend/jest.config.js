@@ -13,4 +13,7 @@ module.exports = {
         '!src/migrations/**',
     ],
     setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+    moduleNameMapping: {
+        '^@supabase/supabase-js$': '<rootDir>/src/test/__mocks__/supabase.ts',
+    },
 };

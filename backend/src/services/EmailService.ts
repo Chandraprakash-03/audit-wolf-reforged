@@ -1,4 +1,5 @@
 // Import will be done dynamically to handle ES module
+/// <reference path="../types/senderwolf.d.ts" />
 
 export interface EmailAttachment {
 	filename: string;
