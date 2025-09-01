@@ -51,6 +51,7 @@ const VulnerabilitySchema = z.object({
 		"access_control",
 		"gas_optimization",
 		"best_practice",
+		"security",
 	]),
 	severity: z.enum(["critical", "high", "medium", "low", "informational"]),
 	description: z.string().min(1),
@@ -300,7 +301,7 @@ Required JSON structure:
 {{
   "vulnerabilities": [
     {{
-      "type": "reentrancy|overflow|access_control|gas_optimization|best_practice",
+      "type": "reentrancy|overflow|access_control|gas_optimization|best_practice|security",
       "severity": "critical|high|medium|low|informational", 
       "description": "Detailed description of the vulnerability",
       "location": {{
