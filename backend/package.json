@@ -73,7 +73,8 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "tmp": "^0.2.3",
-    "yamljs": "^0.3.0"
+    "yamljs": "^0.3.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@sentry/nextjs": "^10.8.0",

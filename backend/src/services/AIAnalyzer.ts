@@ -1,7 +1,8 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { StringOutputParser } from "@langchain/core/output_parsers";
+import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { RunnableSequence } from "@langchain/core/runnables";
+import { z } from "zod";
 import { config as appConfig } from "../config";
 import {
 	AIAnalysisResult,
@@ -35,9 +36,52 @@ export interface ModelResponse {
 	executionTime: number;
 }
 
+// Zod schemas for structured output validation
+const CodeLocationSchema = z.object({
+	file: z.string().default("contract.sol"),
+	line: z.number().int().min(1).default(1),
+	column: z.number().int().min(1).default(1),
+	length: z.number().int().min(1).optional(),
+});
+
+const VulnerabilitySchema = z.object({
+	type: z.enum([
+		"reentrancy",
+		"overflow",
+		"access_control",
+		"gas_optimization",
+		"best_practice",
+	]),
+	severity: z.enum(["critical", "high", "medium", "low", "informational"]),
+	description: z.string().min(1),
+	location: CodeLocationSchema,
+	confidence: z.number().min(0).max(1),
+});
+
+const RecommendationSchema = z.object({
+	category: z.string().min(1),
+	priority: z.enum(["high", "medium", "low"]),
+	description: z.string().min(1),
+	implementation_guide: z.string().min(1),
+});
+
+const QualityMetricsSchema = z.object({
+	code_quality_score: z.number().min(0).max(100),
+	maintainability_index: z.number().min(0).max(100),
+	test_coverage_estimate: z.number().min(0).max(100),
+});
+
+const AIAnalysisSchema = z.object({
+	vulnerabilities: z.array(VulnerabilitySchema),
+	recommendations: z.array(RecommendationSchema),
+	qualityMetrics: QualityMetricsSchema,
+	confidence: z.number().min(0).max(1),
+});
+
 export class AIAnalyzer {
 	private models: ChatOpenAI[];
 	private config: AIAnalyzerConfig;
+	private outputParser: JsonOutputParser;
 
 	constructor(config: AIAnalyzerConfig = {}) {
 		this.config = {
@@ -52,6 +96,9 @@ export class AIAnalyzer {
 			],
 			ensembleThreshold: config.ensembleThreshold || 0.6,
 		};
+
+		// Initialize structured output parser
+		this.outputParser = new JsonOutputParser();
 
 		// Initialize models with OpenRouter
 		this.models = this.config.models!.map(
@@ -162,18 +209,16 @@ export class AIAnalyzer {
 		const startTime = Date.now();
 
 		try {
-			// Create analysis prompt
-			const prompt = this.createAnalysisPrompt(
-				sourceCode,
-				contractName,
-				options
+			// Create analysis prompt template
+			const promptTemplate = PromptTemplate.fromTemplate(
+				this.createAnalysisPrompt(sourceCode, contractName, options)
 			);
 
-			// Create analysis chain
+			// Create analysis chain with structured output
 			const chain = RunnableSequence.from([
-				PromptTemplate.fromTemplate(prompt),
+				promptTemplate,
 				model,
-				new StringOutputParser(),
+				this.outputParser,
 			]);
 
 			// Execute analysis
@@ -181,10 +226,11 @@ export class AIAnalyzer {
 				sourceCode,
 				contractName,
 				focusAreas: options.focusAreas?.join(", ") || "all security aspects",
+				format_instructions: this.outputParser.getFormatInstructions(),
 			});
 
-			// Parse the response
-			const parsedResult = this.parseModelResponse(response, modelName);
+			// Validate and transform the response
+			const parsedResult = this.validateModelResponse(response, modelName);
 
 			return {
 				model: modelName,
@@ -193,12 +239,33 @@ export class AIAnalyzer {
 			};
 		} catch (error) {
 			console.error(`Model ${modelName} analysis failed:`, error);
-			throw error;
+
+			// Try fallback parsing for models that don't follow structured output
+			try {
+				const fallbackResult = await this.fallbackAnalysis(
+					model,
+					sourceCode,
+					contractName,
+					options,
+					modelName
+				);
+				return {
+					model: modelName,
+					...fallbackResult,
+					executionTime: Date.now() - startTime,
+				};
+			} catch (fallbackError) {
+				console.error(
+					`Fallback analysis also failed for ${modelName}:`,
+					fallbackError
+				);
+				throw error;
+			}
 		}
 	}
 
 	/**
-	 * Creates the analysis prompt for AI models
+	 * Creates the analysis prompt for AI models with structured output instructions
 	 */
 	private createAnalysisPrompt(
 		sourceCode: string,
@@ -215,28 +282,41 @@ Contract Source Code:
 {sourceCode}
 \`\`\`
 
-Please provide a comprehensive analysis in the following JSON format:
+{format_instructions}
 
+IMPORTANT: You MUST respond with valid JSON only. Do not include any text before or after the JSON object.
+
+Focus on:
+1. Reentrancy vulnerabilities
+2. Integer overflow/underflow issues  
+3. Access control problems
+4. Gas optimization opportunities
+5. Best practice violations
+6. Logic errors and edge cases
+
+Provide specific line numbers and detailed explanations for each finding. Rate your overall confidence in the analysis (0-1).
+
+Required JSON structure:
 {{
   "vulnerabilities": [
     {{
       "type": "reentrancy|overflow|access_control|gas_optimization|best_practice",
-      "severity": "critical|high|medium|low|informational",
+      "severity": "critical|high|medium|low|informational", 
       "description": "Detailed description of the vulnerability",
       "location": {{
         "file": "contract.sol",
-        "line": 0,
-        "column": 0,
-        "length": 0
+        "line": 1,
+        "column": 1,
+        "length": 10
       }},
       "confidence": 0.95
     }}
   ],
   "recommendations": [
     {{
-      "category": "Security|Gas|Best Practices",
+      "category": "Security",
       "priority": "high|medium|low",
-      "description": "Recommendation description",
+      "description": "Recommendation description", 
       "implementation_guide": "Step-by-step implementation guide"
     }}
   ],
@@ -246,24 +326,14 @@ Please provide a comprehensive analysis in the following JSON format:
     "test_coverage_estimate": 60
   }},
   "confidence": 0.88
-}}
-
-Focus on:
-1. Reentrancy vulnerabilities
-2. Integer overflow/underflow issues
-3. Access control problems
-4. Gas optimization opportunities
-5. Best practice violations
-6. Logic errors and edge cases
-
-Provide specific line numbers and detailed explanations for each finding. Rate your overall confidence in the analysis (0-1).`;
+}}`;
 	}
 
 	/**
-	 * Parses the model response into structured data
+	 * Validates the model response using Zod schema
 	 */
-	private parseModelResponse(
-		response: string,
+	private validateModelResponse(
+		response: any,
 		modelName: string
 	): {
 		vulnerabilities: AIVulnerability[];
@@ -272,29 +342,42 @@ Provide specific line numbers and detailed explanations for each finding. Rate y
 		confidence: number;
 	} {
 		try {
-			// Extract JSON from response (handle cases where model adds extra text)
-			const jsonMatch = response.match(/\{[\s\S]*\}/);
-			if (!jsonMatch) {
-				throw new Error("No JSON found in model response");
-			}
+			// Validate the response with Zod schema
+			const validated = AIAnalysisSchema.parse(response);
 
-			const parsed = JSON.parse(jsonMatch[0]);
-
+			// Transform to our internal types
 			return {
-				vulnerabilities: this.validateVulnerabilities(
-					parsed.vulnerabilities || []
-				),
-				recommendations: this.validateRecommendations(
-					parsed.recommendations || []
-				),
-				qualityMetrics: this.validateQualityMetrics(
-					parsed.qualityMetrics || {}
-				),
-				confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
+				vulnerabilities: validated.vulnerabilities.map((v) => ({
+					type: v.type,
+					severity: v.severity,
+					description: v.description,
+					location: {
+						file: v.location.file,
+						line: v.location.line,
+						column: v.location.column,
+						length: v.location.length,
+					},
+					confidence: v.confidence,
+				})),
+				recommendations: validated.recommendations.map((r) => ({
+					category: r.category,
+					priority: r.priority,
+					description: r.description,
+					implementation_guide: r.implementation_guide,
+				})),
+				qualityMetrics: {
+					code_quality_score: validated.qualityMetrics.code_quality_score,
+					maintainability_index: validated.qualityMetrics.maintainability_index,
+					test_coverage_estimate:
+						validated.qualityMetrics.test_coverage_estimate,
+				},
+				confidence: validated.confidence,
 			};
 		} catch (error) {
-			console.error(`Failed to parse response from ${modelName}:`, error);
-			// Return empty but valid structure
+			console.error(`Failed to validate response from ${modelName}:`, error);
+			console.error("Response was:", JSON.stringify(response, null, 2));
+
+			// Return empty but valid structure as fallback
 			return {
 				vulnerabilities: [],
 				recommendations: [],
@@ -309,87 +392,92 @@ Provide specific line numbers and detailed explanations for each finding. Rate y
 	}
 
 	/**
-	 * Validates and sanitizes vulnerability data
+	 * Fallback analysis for models that don't support structured output
 	 */
-	private validateVulnerabilities(vulnerabilities: any[]): AIVulnerability[] {
-		const validTypes = [
-			"reentrancy",
-			"overflow",
-			"access_control",
-			"gas_optimization",
-			"best_practice",
-		];
-		const validSeverities = [
-			"critical",
-			"high",
-			"medium",
-			"low",
-			"informational",
-		];
+	private async fallbackAnalysis(
+		model: ChatOpenAI,
+		sourceCode: string,
+		contractName: string,
+		options: AIAnalysisOptions,
+		modelName: string
+	): Promise<{
+		vulnerabilities: AIVulnerability[];
+		recommendations: SecurityRecommendation[];
+		qualityMetrics: QualityMetrics;
+		confidence: number;
+	}> {
+		console.log(`Attempting fallback analysis for ${modelName}`);
 
-		return vulnerabilities
-			.filter((v) => v && typeof v === "object")
-			.map((v) => ({
-				type: validTypes.includes(v.type) ? v.type : "best_practice",
-				severity: validSeverities.includes(v.severity) ? v.severity : "low",
-				description: String(v.description || "No description provided"),
-				location: this.validateLocation(v.location),
-				confidence: Math.max(0, Math.min(1, Number(v.confidence) || 0.5)),
-			}));
-	}
+		// Use simple string output parser for fallback
+		const fallbackPrompt = `You are an expert smart contract security auditor. Analyze the following Solidity contract.
 
-	/**
-	 * Validates and sanitizes recommendation data
-	 */
-	private validateRecommendations(
-		recommendations: any[]
-	): SecurityRecommendation[] {
-		const validPriorities = ["high", "medium", "low"];
+Contract: ${contractName}
 
-		return recommendations
-			.filter((r) => r && typeof r === "object")
-			.map((r) => ({
-				category: String(r.category || "General"),
-				priority: validPriorities.includes(r.priority) ? r.priority : "medium",
-				description: String(r.description || "No description provided"),
-				implementation_guide: String(
-					r.implementation_guide || "No implementation guide provided"
-				),
-			}));
-	}
+\`\`\`solidity
+${sourceCode}
+\`\`\`
 
-	/**
-	 * Validates and sanitizes quality metrics
-	 */
-	private validateQualityMetrics(metrics: any): QualityMetrics {
-		return {
-			code_quality_score: Math.max(
-				0,
-				Math.min(100, Number(metrics.code_quality_score) || 50)
-			),
-			maintainability_index: Math.max(
-				0,
-				Math.min(100, Number(metrics.maintainability_index) || 50)
-			),
-			test_coverage_estimate: Math.max(
-				0,
-				Math.min(100, Number(metrics.test_coverage_estimate) || 0)
-			),
-		};
-	}
+CRITICAL: Respond with ONLY valid JSON in this exact format (no additional text):
 
-	/**
-	 * Validates and sanitizes location data
-	 */
-	private validateLocation(location: any): CodeLocation {
-		return {
-			file: String(location?.file || "contract.sol"),
-			line: Math.max(1, Number(location?.line) || 1),
-			column: Math.max(1, Number(location?.column) || 1),
-			length: location?.length
-				? Math.max(1, Number(location.length))
-				: undefined,
-		};
+{
+  "vulnerabilities": [
+    {
+      "type": "reentrancy",
+      "severity": "high", 
+      "description": "Description here",
+      "location": {"file": "contract.sol", "line": 1, "column": 1},
+      "confidence": 0.9
+    }
+  ],
+  "recommendations": [
+    {
+      "category": "Security",
+      "priority": "high",
+      "description": "Recommendation here",
+      "implementation_guide": "Guide here"
+    }
+  ],
+  "qualityMetrics": {
+    "code_quality_score": 80,
+    "maintainability_index": 75,
+    "test_coverage_estimate": 60
+  },
+  "confidence": 0.85
+}`;
+
+		const response = await model.invoke(fallbackPrompt);
+		const responseText =
+			typeof response.content === "string"
+				? response.content
+				: String(response.content);
+
+		// Try to extract and parse JSON with multiple strategies
+		let parsed: any;
+
+		// Strategy 1: Look for complete JSON object
+		let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+		if (jsonMatch) {
+			try {
+				parsed = JSON.parse(jsonMatch[0]);
+			} catch (e) {
+				// Strategy 2: Try to find JSON between code blocks
+				const codeBlockMatch = responseText.match(
+					/```(?:json)?\s*(\{[\s\S]*?\})\s*```/
+				);
+				if (codeBlockMatch) {
+					parsed = JSON.parse(codeBlockMatch[1]);
+				} else {
+					throw new Error("Failed to parse JSON from response");
+				}
+			}
+		} else {
+			throw new Error("No JSON found in fallback response");
+		}
+
+		// Validate with Zod schema
+		const validated = AIAnalysisSchema.parse(parsed);
+
+		return this.validateModelResponse(validated, modelName);
 	}
 
 	/**
