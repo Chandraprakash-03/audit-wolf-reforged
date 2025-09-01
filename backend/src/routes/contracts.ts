@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { ContractModel } from "../models/Contract";
 import { AnalysisService } from "../services/AnalysisService";
+import { AuditOrchestrator, JobPriority } from "../services/AuditOrchestrator";
 import { authenticateToken, AuthenticatedRequest } from "../middleware/auth";
 import {
 	validateContractInput,
@@ -85,16 +86,25 @@ router.post(
 				});
 			}
 
-			// Optionally start static analysis automatically
+			// Optionally start analysis automatically (configurable type)
 			let auditId: string | undefined;
 			try {
-				const analysisResult = await analysisService.startStaticAnalysis({
-					contractId: contract.id,
-					userId,
-					analysisType: "static",
-				});
-				if (analysisResult.success) {
-					auditId = analysisResult.auditId;
+				const auditOrchestrator = req.app.locals
+					.auditOrchestrator as AuditOrchestrator;
+
+				if (auditOrchestrator) {
+					const defaultAnalysisType =
+						(process.env.DEFAULT_ANALYSIS_TYPE as "static" | "ai" | "full") ||
+						"full";
+					const analysisResult = await auditOrchestrator.startAudit({
+						contractId: contract.id,
+						userId,
+						analysisType: defaultAnalysisType,
+						priority: JobPriority.NORMAL,
+					});
+					if (analysisResult.success) {
+						auditId = analysisResult.auditId;
+					}
 				}
 			} catch (analysisError) {
 				console.warn("Failed to start automatic analysis:", analysisError);
