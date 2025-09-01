@@ -283,7 +283,8 @@ export class DatabaseService {
 			| "overflow"
 			| "access_control"
 			| "gas_optimization"
-			| "best_practice";
+			| "best_practice"
+			| "security";
 		severity: "critical" | "high" | "medium" | "low" | "informational";
 		title: string;
 		description: string;
