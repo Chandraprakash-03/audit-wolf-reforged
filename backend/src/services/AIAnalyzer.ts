@@ -217,36 +217,36 @@ Contract Source Code:
 
 Please provide a comprehensive analysis in the following JSON format:
 
-{
+{{
   "vulnerabilities": [
-    {
+    {{
       "type": "reentrancy|overflow|access_control|gas_optimization|best_practice",
       "severity": "critical|high|medium|low|informational",
       "description": "Detailed description of the vulnerability",
-      "location": {
+      "location": {{
         "file": "contract.sol",
         "line": 0,
         "column": 0,
         "length": 0
-      },
+      }},
       "confidence": 0.95
-    }
+    }}
   ],
   "recommendations": [
-    {
+    {{
       "category": "Security|Gas|Best Practices",
       "priority": "high|medium|low",
       "description": "Recommendation description",
       "implementation_guide": "Step-by-step implementation guide"
-    }
+    }}
   ],
-  "qualityMetrics": {
+  "qualityMetrics": {{
     "code_quality_score": 85,
     "maintainability_index": 75,
     "test_coverage_estimate": 60
-  },
+  }},
   "confidence": 0.88
-}
+}}
 
 Focus on:
 1. Reentrancy vulnerabilities
