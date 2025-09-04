@@ -22,6 +22,7 @@ export function LogoutButton({
 		setIsLoading(true);
 		try {
 			await signOut();
+			window.location.href = "/";
 		} catch (error) {
 			console.error("Sign out error:", error);
 		} finally {

@@ -34,8 +34,30 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="en" suppressHydrationWarning>
+			<head>
+				<script
+					dangerouslySetInnerHTML={{
+						__html: `
+							(function() {
+								try {
+									const theme = localStorage.getItem('theme') || 'system';
+									let resolvedTheme = theme;
+									
+									if (theme === 'system') {
+										resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+									}
+									
+									document.documentElement.classList.add(resolvedTheme);
+								} catch (e) {
+									document.documentElement.classList.add('light');
+								}
+							})();
+						`,
+					}}
+				/>
+			</head>
 			<body
-				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+				className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
 			>
 				<ErrorBoundary>
 					<ThemeProvider>

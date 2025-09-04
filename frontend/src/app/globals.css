@@ -150,6 +150,25 @@
 		height: auto;
 	}
 
+	/* Prevent textarea from growing exponentially */
+	textarea[data-slot="textarea"] {
+		field-sizing: content !important;
+		max-height: 600px;
+		overflow-y: auto;
+		resize: vertical;
+	}
+
+	/* Code editor specific fixes */
+	.code-editor-container {
+		max-height: 600px;
+		overflow: hidden;
+	}
+
+	.code-editor-container textarea {
+		max-height: inherit;
+		overflow-y: auto;
+	}
+
 	/* Prevent any element from creating horizontal scroll */
 	* {
 		box-sizing: border-box;

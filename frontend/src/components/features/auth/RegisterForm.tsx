@@ -145,7 +145,7 @@ export function RegisterForm({
 			<CardContent>
 				<form onSubmit={handleSubmit} className="space-y-4">
 					{errors.general && (
-						<div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+						<div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
 							{errors.general}
 						</div>
 					)}
@@ -158,11 +158,11 @@ export function RegisterForm({
 							placeholder="Enter your full name"
 							value={formData.name}
 							onChange={handleInputChange("name")}
-							className={errors.name ? "border-red-500" : ""}
+							className={errors.name ? "border-destructive" : ""}
 							disabled={isLoading}
 						/>
 						{errors.name && (
-							<p className="text-sm text-red-600">{errors.name}</p>
+							<p className="text-sm text-destructive">{errors.name}</p>
 						)}
 					</div>
 
@@ -174,11 +174,11 @@ export function RegisterForm({
 							placeholder="Enter your email"
 							value={formData.email}
 							onChange={handleInputChange("email")}
-							className={errors.email ? "border-red-500" : ""}
+							className={errors.email ? "border-destructive" : ""}
 							disabled={isLoading}
 						/>
 						{errors.email && (
-							<p className="text-sm text-red-600">{errors.email}</p>
+							<p className="text-sm text-destructive">{errors.email}</p>
 						)}
 					</div>
 
@@ -190,11 +190,11 @@ export function RegisterForm({
 							placeholder="Create a strong password"
 							value={formData.password}
 							onChange={handleInputChange("password")}
-							className={errors.password ? "border-red-500" : ""}
+							className={errors.password ? "border-destructive" : ""}
 							disabled={isLoading}
 						/>
 						{errors.password && (
-							<p className="text-sm text-red-600">{errors.password}</p>
+							<p className="text-sm text-destructive">{errors.password}</p>
 						)}
 					</div>
 
@@ -206,11 +206,13 @@ export function RegisterForm({
 							placeholder="Confirm your password"
 							value={formData.confirmPassword}
 							onChange={handleInputChange("confirmPassword")}
-							className={errors.confirmPassword ? "border-red-500" : ""}
+							className={errors.confirmPassword ? "border-destructive" : ""}
 							disabled={isLoading}
 						/>
 						{errors.confirmPassword && (
-							<p className="text-sm text-red-600">{errors.confirmPassword}</p>
+							<p className="text-sm text-destructive">
+								{errors.confirmPassword}
+							</p>
 						)}
 					</div>
 
@@ -221,12 +223,12 @@ export function RegisterForm({
 
 				{onToggleMode && (
 					<div className="mt-6 text-center">
-						<div className="text-sm text-gray-600">
+						<div className="text-sm text-muted-foreground">
 							Already have an account?{" "}
 							<button
 								type="button"
 								onClick={onToggleMode}
-								className="text-blue-600 hover:text-blue-800 underline"
+								className="text-primary hover:text-primary/80 underline"
 							>
 								Sign in
 							</button>

@@ -1,6 +1,7 @@
 import express from "express";
 import { AuditModel } from "../models/Audit";
 import { ContractModel } from "../models/Contract";
+import { VulnerabilityModel } from "../models/Vulnerability";
 import { DatabaseService } from "../services/database";
 import { authenticateToken, AuthenticatedRequest } from "../middleware/auth";
 import { logger } from "../utils/logger";
@@ -46,6 +47,11 @@ router.use(authenticateToken);
  *         schema:
  *           type: string
  *         description: Filter by contract name
+ *       - in: query
+ *         name: platform
+ *         schema:
+ *           type: string
+ *         description: Filter by blockchain platform
  *       - in: query
  *         name: dateFrom
  *         schema:
@@ -106,6 +112,7 @@ router.get("/", async (req: AuthenticatedRequest, res) => {
 		const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
 		const status = req.query.status as string;
 		const contractName = req.query.contractName as string;
+		const platform = req.query.platform as string;
 		const dateFrom = req.query.dateFrom as string;
 		const dateTo = req.query.dateTo as string;
 
@@ -126,6 +133,12 @@ router.get("/", async (req: AuthenticatedRequest, res) => {
 				(audit as any).contracts?.name
 					?.toLowerCase()
 					.includes(contractName.toLowerCase())
+			);
+		}
+
+		if (platform) {
+			filteredAudits = filteredAudits.filter(
+				(audit) => (audit as any).contracts?.blockchain_platform === platform
 			);
 		}
 
@@ -155,7 +168,7 @@ router.get("/", async (req: AuthenticatedRequest, res) => {
 			total,
 			page,
 			limit,
-			filters: { status, contractName, dateFrom, dateTo },
+			filters: { status, contractName, platform, dateFrom, dateTo },
 		});
 
 		res.json({
@@ -544,11 +557,34 @@ router.get("/:id/report", async (req: AuthenticatedRequest, res) => {
 			});
 		}
 
-		logger.info("Fetched audit report", { auditId: id, userId });
+		// Fetch vulnerabilities separately to include in the report
+		const vulnerabilities = await VulnerabilityModel.findByAuditId(id);
+
+		logger.info("Fetched audit report", {
+			auditId: id,
+			userId,
+			vulnerabilityCount: vulnerabilities.length,
+		});
+
+		// Include vulnerabilities in the report data
+		const reportWithVulnerabilities = {
+			...audit.final_report,
+			vulnerabilities: vulnerabilities.map((vuln) => ({
+				id: vuln.id,
+				title: vuln.title,
+				description: vuln.description,
+				severity: vuln.severity,
+				type: vuln.type,
+				location: vuln.location,
+				recommendation: vuln.recommendation,
+				confidence: vuln.confidence,
+				source: vuln.source,
+			})),
+		};
 
 		res.json({
 			success: true,
-			data: audit.final_report,
+			data: reportWithVulnerabilities,
 		});
 	} catch (error) {
 		logger.error("Error fetching audit report", {

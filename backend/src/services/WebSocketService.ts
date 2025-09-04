@@ -293,6 +293,27 @@ export class WebSocketService {
 	}
 
 	/**
+	 * Notifies a user about multi-chain analysis progress
+	 */
+	notifyMultiChainProgress(userId: string, progress: any): void {
+		try {
+			// Send to user-specific room
+			this.io.to(`user:${userId}`).emit("multichain:progress", progress);
+
+			// Also send to audit-specific room
+			this.io
+				.to(`multichain:${progress.multiChainAuditId}`)
+				.emit("multichain:progress", progress);
+
+			console.log(
+				`Sent multi-chain progress update for audit ${progress.multiChainAuditId} to user ${userId}`
+			);
+		} catch (error) {
+			console.error("Error sending multi-chain progress notification:", error);
+		}
+	}
+
+	/**
 	 * Gracefully closes all WebSocket connections
 	 */
 	async close(): Promise<void> {

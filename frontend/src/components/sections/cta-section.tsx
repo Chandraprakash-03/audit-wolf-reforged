@@ -47,9 +47,9 @@ export function CTASection({ user }: CTASectionProps) {
 							</Button>
 						</div>
 
-						<p className="text-sm text-muted-foreground mt-8">
+						{/* <p className="text-sm text-muted-foreground mt-8">
 							No credit card required • Free tier available • Enterprise support
-						</p>
+						</p> */}
 					</div>
 				</ScrollReveal>
 			</Container>

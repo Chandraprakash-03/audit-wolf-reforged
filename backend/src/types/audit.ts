@@ -15,6 +15,7 @@ export interface AuditRequest {
 	contractId: string;
 	userId: string;
 	analysisType: "static" | "ai" | "full";
+	platform?: string;
 	priority?: JobPriority;
 	options?: {
 		includeRecommendations?: boolean;

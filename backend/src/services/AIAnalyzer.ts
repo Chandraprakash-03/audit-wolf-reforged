@@ -11,6 +11,11 @@ import {
 	QualityMetrics,
 	CodeLocation,
 } from "../types/database";
+import {
+	platformContextEngine,
+	PlatformAIAnalysisOptions,
+} from "./PlatformContextEngine";
+import { ContractInput, PlatformVulnerability } from "../types/blockchain";
 
 export interface AIAnalyzerConfig {
 	timeout?: number;
@@ -90,10 +95,10 @@ export class AIAnalyzer {
 			maxTokens: config.maxTokens || 4000,
 			temperature: config.temperature || 0.1, // Low temperature for consistent analysis
 			models: config.models || [
-				"deepseek/deepseek-chat-v3.1:free",
+				// "deepseek/deepseek-chat-v3.1:free",
 				"moonshotai/kimi-k2:free",
-				"openai/gpt-oss-120b:free",
 				"z-ai/glm-4.5-air:free",
+				// "openai/gpt-oss-20b:free",
 			],
 			ensembleThreshold: config.ensembleThreshold || 0.6,
 		};
@@ -106,7 +111,7 @@ export class AIAnalyzer {
 			(modelName) =>
 				new ChatOpenAI({
 					modelName,
-					openAIApiKey: appConfig.openRouter.apiKey,
+					apiKey: appConfig.openRouter.apiKey,
 					configuration: {
 						baseURL: "https://openrouter.ai/api/v1",
 						defaultHeaders: {
@@ -121,7 +126,7 @@ export class AIAnalyzer {
 	}
 
 	/**
-	 * Analyzes a smart contract using multiple AI models
+	 * Analyzes a smart contract using multiple AI models with platform-specific context
 	 */
 	async analyzeContract(
 		sourceCode: string,
@@ -198,6 +203,119 @@ export class AIAnalyzer {
 	}
 
 	/**
+	 * Analyzes a contract with platform-specific context and vulnerability mapping
+	 */
+	async analyzePlatformContract(
+		contract: ContractInput,
+		options: PlatformAIAnalysisOptions = { platform: contract.platform }
+	): Promise<{
+		success: boolean;
+		result?: {
+			vulnerabilities: PlatformVulnerability[];
+			recommendations: SecurityRecommendation[];
+			code_quality: QualityMetrics;
+			confidence: number;
+		};
+		error?: string;
+		executionTime?: number;
+		modelResponses?: ModelResponse[];
+	}> {
+		const startTime = Date.now();
+
+		try {
+			console.log(
+				`Starting platform-specific AI analysis for ${contract.platform} contract: ${contract.filename}`
+			);
+
+			// Get platform-specific context and create enhanced prompt
+			const platformPrompt = platformContextEngine.createPlatformAnalysisPrompt(
+				contract,
+				options
+			);
+
+			// Run analysis with multiple models using the platform-specific prompt
+			const modelPromises = this.models.map((model, index) =>
+				this.analyzeWithPlatformModel(
+					model,
+					this.config.models![index],
+					platformPrompt,
+					contract,
+					options
+				)
+			);
+
+			const modelResponses = await Promise.allSettled(modelPromises);
+			const successfulResponses: ModelResponse[] = [];
+
+			// Collect successful responses
+			modelResponses.forEach((response, index) => {
+				if (response.status === "fulfilled") {
+					successfulResponses.push(response.value);
+				} else {
+					console.error(
+						`Model ${this.config.models![index]} failed:`,
+						response.reason
+					);
+				}
+			});
+
+			if (successfulResponses.length === 0) {
+				return {
+					success: false,
+					error: "All AI models failed to analyze the contract",
+					executionTime: Date.now() - startTime,
+				};
+			}
+
+			// Combine results using ensemble method
+			const ensembleResult = this.combineModelResults(successfulResponses);
+
+			// Map vulnerabilities to platform-specific format
+			const platformVulnerabilities = platformContextEngine.mapVulnerabilities(
+				ensembleResult.vulnerabilities,
+				contract.platform
+			);
+
+			// Get platform-specific recommendations
+			const platformRecommendations =
+				platformContextEngine.getPlatformRecommendations(
+					platformVulnerabilities,
+					contract.platform
+				);
+
+			// Combine with AI recommendations
+			const allRecommendations = [
+				...ensembleResult.recommendations,
+				...platformRecommendations,
+			];
+
+			const executionTime = Date.now() - startTime;
+			console.log(
+				`Platform-specific AI analysis completed in ${executionTime}ms with ${successfulResponses.length} models`
+			);
+
+			return {
+				success: true,
+				result: {
+					vulnerabilities: platformVulnerabilities,
+					recommendations: allRecommendations,
+					code_quality: ensembleResult.code_quality,
+					confidence: ensembleResult.confidence,
+				},
+				executionTime,
+				modelResponses: successfulResponses,
+			};
+		} catch (error) {
+			console.error("Platform-specific AI analysis failed:", error);
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : "Unknown error",
+				executionTime: Date.now() - startTime,
+			};
+		}
+	}
+
+	/**
 	 * Analyzes contract with a single AI model
 	 */
 	private async analyzeWithModel(
@@ -263,6 +381,184 @@ export class AIAnalyzer {
 				throw error;
 			}
 		}
+	}
+
+	/**
+	 * Analyzes contract with a single AI model using platform-specific context
+	 */
+	private async analyzeWithPlatformModel(
+		model: ChatOpenAI,
+		modelName: string,
+		platformPrompt: string,
+		contract: ContractInput,
+		options: PlatformAIAnalysisOptions
+	): Promise<ModelResponse> {
+		const startTime = Date.now();
+
+		try {
+			// Execute analysis with platform-specific prompt
+			const response = await model.invoke(platformPrompt);
+			const responseText =
+				typeof response.content === "string"
+					? response.content
+					: String(response.content);
+
+			// Parse and validate the response
+			const parsedResult = this.parsePlatformResponse(responseText, modelName);
+
+			return {
+				model: modelName,
+				...parsedResult,
+				executionTime: Date.now() - startTime,
+			};
+		} catch (error) {
+			console.error(`Platform model ${modelName} analysis failed:`, error);
+
+			// Try fallback parsing for models that don't follow structured output
+			try {
+				const fallbackResult = await this.fallbackPlatformAnalysis(
+					model,
+					contract,
+					options,
+					modelName
+				);
+				return {
+					model: modelName,
+					...fallbackResult,
+					executionTime: Date.now() - startTime,
+				};
+			} catch (fallbackError) {
+				console.error(
+					`Fallback platform analysis also failed for ${modelName}:`,
+					fallbackError
+				);
+				throw error;
+			}
+		}
+	}
+
+	/**
+	 * Parse platform-specific AI response
+	 */
+	private parsePlatformResponse(
+		responseText: string,
+		modelName: string
+	): {
+		vulnerabilities: AIVulnerability[];
+		recommendations: SecurityRecommendation[];
+		qualityMetrics: QualityMetrics;
+		confidence: number;
+	} {
+		try {
+			// Try to extract and parse JSON with multiple strategies
+			let parsed: any;
+
+			// Strategy 1: Look for complete JSON object
+			let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				try {
+					parsed = JSON.parse(jsonMatch[0]);
+				} catch (e) {
+					// Strategy 2: Try to find JSON between code blocks
+					const codeBlockMatch = responseText.match(
+						/```(?:json)?\s*(\{[\s\S]*?\})\s*```/
+					);
+					if (codeBlockMatch) {
+						parsed = JSON.parse(codeBlockMatch[1]);
+					} else {
+						throw new Error("Failed to parse JSON from response");
+					}
+				}
+			} else {
+				throw new Error("No JSON found in platform response");
+			}
+
+			// Validate with Zod schema
+			const validated = AIAnalysisSchema.parse(parsed);
+
+			return this.validateModelResponse(validated, modelName);
+		} catch (error) {
+			console.error(
+				`Failed to parse platform response from ${modelName}:`,
+				error
+			);
+			console.error("Response was:", responseText.substring(0, 500));
+
+			// Return empty but valid structure as fallback
+			return {
+				vulnerabilities: [],
+				recommendations: [],
+				qualityMetrics: {
+					code_quality_score: 50,
+					maintainability_index: 50,
+					test_coverage_estimate: 0,
+				},
+				confidence: 0.1,
+			};
+		}
+	}
+
+	/**
+	 * Fallback platform analysis for models that don't support structured output
+	 */
+	private async fallbackPlatformAnalysis(
+		model: ChatOpenAI,
+		contract: ContractInput,
+		options: PlatformAIAnalysisOptions,
+		modelName: string
+	): Promise<{
+		vulnerabilities: AIVulnerability[];
+		recommendations: SecurityRecommendation[];
+		qualityMetrics: QualityMetrics;
+		confidence: number;
+	}> {
+		console.log(`Attempting fallback platform analysis for ${modelName}`);
+
+		// Create a simpler platform-aware prompt for fallback
+		const fallbackPrompt = `You are an expert ${contract.platform} smart contract security auditor. Analyze this contract and respond with ONLY valid JSON:
+
+Contract: ${contract.filename}
+Platform: ${contract.platform}
+
+\`\`\`
+${contract.code}
+\`\`\`
+
+CRITICAL: Respond with ONLY valid JSON in this exact format (no additional text):
+
+{
+  "vulnerabilities": [
+    {
+      "type": "platform_specific_type",
+      "severity": "high", 
+      "description": "Description here",
+      "location": {"file": "${contract.filename}", "line": 1, "column": 1},
+      "confidence": 0.9
+    }
+  ],
+  "recommendations": [
+    {
+      "category": "Security",
+      "priority": "high",
+      "description": "Recommendation here",
+      "implementation_guide": "Guide here"
+    }
+  ],
+  "qualityMetrics": {
+    "code_quality_score": 80,
+    "maintainability_index": 75,
+    "test_coverage_estimate": 60
+  },
+  "confidence": 0.85
+}`;
+
+		const response = await model.invoke(fallbackPrompt);
+		const responseText =
+			typeof response.content === "string"
+				? response.content
+				: String(response.content);
+
+		return this.parsePlatformResponse(responseText, modelName);
 	}
 
 	/**
@@ -623,10 +919,10 @@ CRITICAL: Respond with ONLY valid JSON in this exact format (no additional text)
 
 			await testModel.invoke("test");
 			availableModels = [
-				"deepseek/deepseek-chat-v3.1:free",
+				// "deepseek/deepseek-chat-v3.1:free",
 				"moonshotai/kimi-k2:free",
-				"openai/gpt-oss-120b:free",
 				"z-ai/glm-4.5-air:free",
+				// "openai/gpt-oss-20b:free",
 			];
 		} catch (error) {
 			errors.push(`API connection test failed: ${error}`);

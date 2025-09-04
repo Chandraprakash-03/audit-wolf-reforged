@@ -6,6 +6,11 @@ import fs from "fs";
 import os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { blockchainRegistry } from "./BlockchainRegistry";
+import {
+	BlockchainPlatform,
+	InstallationCheckResult,
+} from "../types/blockchain";
 
 const execAsync = promisify(exec);
 
@@ -39,9 +44,33 @@ export interface HealthStatus {
 	};
 }
 
+/**
+ * Platform health status interface
+ */
+export interface PlatformHealthStatus {
+	platformId: string;
+	status: "healthy" | "degraded" | "unhealthy" | "unknown";
+	analyzers: Array<{
+		name: string;
+		status: "healthy" | "unhealthy" | "unknown";
+		version?: string;
+		error?: string;
+		responseTime: number;
+	}>;
+	aiModels: Array<{
+		modelId: string;
+		status: "healthy" | "unhealthy" | "unknown";
+		error?: string;
+		responseTime: number;
+	}>;
+	lastChecked: string;
+	responseTime: number;
+}
+
 export class HealthCheckService {
 	private redis: Redis | null = null;
 	private readonly version = process.env.npm_package_version || "1.0.0";
+	private static platformHealthCache = new Map<string, PlatformHealthStatus>();
 
 	constructor() {
 		// Initialize Redis connection for health checks
@@ -595,6 +624,178 @@ export class HealthCheckService {
 				error: error instanceof Error ? error.message : String(error),
 			});
 		}
+	}
+
+	/**
+	 * Check health of a specific blockchain platform
+	 */
+	static async checkPlatformHealth(
+		platformId: string
+	): Promise<PlatformHealthStatus> {
+		const startTime = Date.now();
+
+		try {
+			const platform = blockchainRegistry.getPlatform(platformId);
+			if (!platform) {
+				return {
+					platformId,
+					status: "unknown",
+					analyzers: [],
+					aiModels: [],
+					lastChecked: new Date().toISOString(),
+					responseTime: Date.now() - startTime,
+				};
+			}
+
+			// Check static analyzers
+			const analyzerChecks = await Promise.all(
+				platform.staticAnalyzers.map(async (analyzer) => {
+					const checkStart = Date.now();
+					try {
+						const installCheck = await analyzer.installationCheck();
+						return {
+							name: analyzer.name,
+							status: installCheck.installed
+								? ("healthy" as const)
+								: ("unhealthy" as const),
+							version: installCheck.version,
+							error: installCheck.error,
+							responseTime: Date.now() - checkStart,
+						};
+					} catch (error) {
+						return {
+							name: analyzer.name,
+							status: "unhealthy" as const,
+							error: error instanceof Error ? error.message : "Unknown error",
+							responseTime: Date.now() - checkStart,
+						};
+					}
+				})
+			);
+
+			// Check AI models (simplified check)
+			const aiModelChecks = platform.aiModels.map((model) => ({
+				modelId: model.modelId,
+				status: "healthy" as const, // Simplified for now
+				responseTime: 0,
+			}));
+
+			// Determine overall platform status
+			const hasUnhealthyAnalyzers = analyzerChecks.some(
+				(check) => check.status === "unhealthy"
+			);
+			const platformStatus = hasUnhealthyAnalyzers ? "degraded" : "healthy";
+
+			const healthStatus: PlatformHealthStatus = {
+				platformId,
+				status: platformStatus,
+				analyzers: analyzerChecks,
+				aiModels: aiModelChecks,
+				lastChecked: new Date().toISOString(),
+				responseTime: Date.now() - startTime,
+			};
+
+			// Cache the result
+			this.platformHealthCache.set(platformId, healthStatus);
+
+			return healthStatus;
+		} catch (error) {
+			logger.error(`Platform health check failed for ${platformId}:`, error);
+
+			const healthStatus: PlatformHealthStatus = {
+				platformId,
+				status: "unhealthy",
+				analyzers: [],
+				aiModels: [],
+				lastChecked: new Date().toISOString(),
+				responseTime: Date.now() - startTime,
+			};
+
+			this.platformHealthCache.set(platformId, healthStatus);
+			return healthStatus;
+		}
+	}
+
+	/**
+	 * Get cached platform health status
+	 */
+	static getCachedPlatformHealth(
+		platformId: string
+	): PlatformHealthStatus | undefined {
+		return this.platformHealthCache.get(platformId);
+	}
+
+	/**
+	 * Check health of all platforms
+	 */
+	static async checkAllPlatformsHealth(): Promise<
+		Map<string, PlatformHealthStatus>
+	> {
+		const platforms = blockchainRegistry.getAllPlatforms();
+		const healthResults = new Map<string, PlatformHealthStatus>();
+
+		await Promise.all(
+			platforms.map(async (platform) => {
+				const health = await this.checkPlatformHealth(platform.id);
+				healthResults.set(platform.id, health);
+			})
+		);
+
+		return healthResults;
+	}
+
+	/**
+	 * Check if a specific analyzer tool is installed and working
+	 */
+	static async checkAnalyzerInstallation(
+		command: string,
+		args: string[] = ["--version"]
+	): Promise<InstallationCheckResult> {
+		try {
+			const result = await execAsync(`${command} ${args.join(" ")}`, {
+				timeout: 5000,
+			});
+
+			// Extract version from output if possible
+			const versionMatch = result.stdout.match(/(\d+\.\d+\.\d+)/);
+			const version = versionMatch ? versionMatch[1] : undefined;
+
+			return {
+				installed: true,
+				version,
+			};
+		} catch (error) {
+			return {
+				installed: false,
+				error: error instanceof Error ? error.message : "Unknown error",
+			};
+		}
+	}
+
+	/**
+	 * Get platform health summary
+	 */
+	static async getPlatformHealthSummary(): Promise<{
+		total: number;
+		healthy: number;
+		degraded: number;
+		unhealthy: number;
+		unknown: number;
+		platforms: PlatformHealthStatus[];
+	}> {
+		const healthResults = await this.checkAllPlatformsHealth();
+		const platforms = Array.from(healthResults.values());
+
+		const summary = {
+			total: platforms.length,
+			healthy: platforms.filter((p) => p.status === "healthy").length,
+			degraded: platforms.filter((p) => p.status === "degraded").length,
+			unhealthy: platforms.filter((p) => p.status === "unhealthy").length,
+			unknown: platforms.filter((p) => p.status === "unknown").length,
+			platforms,
+		};
+
+		return summary;
 	}
 }
 

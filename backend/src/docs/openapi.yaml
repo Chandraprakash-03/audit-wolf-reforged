@@ -1016,6 +1016,193 @@ components:
                     downloadUrl:
                       type: string
 
+    # Multi-Blockchain Schemas
+    BlockchainPlatform:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "ethereum"
+        name:
+          type: string
+          example: "Ethereum"
+        displayName:
+          type: string
+          example: "Ethereum & EVM Compatible"
+        description:
+          type: string
+          example: "Ethereum Virtual Machine compatible blockchains"
+        supported_languages:
+          type: array
+          items:
+            type: string
+          example: ["solidity", "vyper"]
+        file_extensions:
+          type: array
+          items:
+            type: string
+          example: [".sol", ".vy"]
+        static_analyzers:
+          type: object
+        ai_models:
+          type: object
+        validation_rules:
+          type: object
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        capabilities:
+          type: object
+          properties:
+            detectionPatterns:
+              type: integer
+            validationRules:
+              type: integer
+            documentation:
+              type: string
+            website:
+              type: string
+
+    MultiChainAudit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        audit_name:
+          type: string
+          example: "Cross-chain DeFi Protocol Audit"
+        platforms:
+          type: array
+          items:
+            type: string
+          example: ["ethereum", "solana", "cardano"]
+        contracts:
+          type: object
+        cross_chain_analysis:
+          type: boolean
+          example: true
+        status:
+          type: string
+          enum: [pending, analyzing, completed, failed]
+        results:
+          type: object
+        cross_chain_results:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        summary:
+          type: object
+          properties:
+            platformCount:
+              type: integer
+            contractCount:
+              type: integer
+            totalVulnerabilities:
+              type: integer
+            vulnerabilitiesByPlatform:
+              type: object
+            highestSeverity:
+              type: string
+              enum: [critical, high, medium, low, informational]
+            duration:
+              type: integer
+
+    PlatformDetectionResult:
+      type: object
+      properties:
+        platform:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            displayName:
+              type: string
+            supportedLanguages:
+              type: array
+              items:
+                type: string
+            fileExtensions:
+              type: array
+              items:
+                type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        matchedPatterns:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              description:
+                type: string
+              weight:
+                type: number
+
+    MultiChainAnalysisRequest:
+      type: object
+      required:
+        - auditName
+        - platforms
+        - contracts
+      properties:
+        auditName:
+          type: string
+          example: "Multi-chain DeFi Protocol"
+        platforms:
+          type: array
+          items:
+            type: string
+          example: ["ethereum", "solana"]
+        contracts:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              filename:
+                type: string
+              platform:
+                type: string
+        crossChainAnalysis:
+          type: boolean
+          default: false
+        analysisOptions:
+          type: object
+          properties:
+            includeStaticAnalysis:
+              type: boolean
+              default: true
+            includeAIAnalysis:
+              type: boolean
+              default: false
+            severityThreshold:
+              type: string
+              enum: [low, medium, high, critical]
+              default: "low"
+            timeout:
+              type: integer
+              default: 300000
+
 tags:
   - name: Health
     description: System health and monitoring endpoints
@@ -1025,5 +1212,7 @@ tags:
     description: Smart contract management
   - name: Analysis
     description: Contract analysis and auditing
+  - name: Multi-Blockchain
+    description: Multi-blockchain platform support and cross-chain analysis
   - name: Reports
     description: Audit report generation and management

@@ -14,6 +14,7 @@ import { WebSocketService } from "./WebSocketService";
 import EmailService from "./EmailService";
 import { Contract, Audit } from "../types/database";
 import { AuditProgress, AuditRequest } from "../types/audit";
+import { encryptionService } from "./EncryptionService";
 
 // Re-export for backward compatibility
 export { AuditProgress, AuditRequest, JobPriority };
@@ -39,10 +40,10 @@ export class AuditOrchestrator {
 			maxTokens: 4000,
 			temperature: 0.1,
 			models: [
-				"deepseek/deepseek-chat-v3.1:free",
+				// "deepseek/deepseek-chat-v3.1:free",
 				"moonshotai/kimi-k2:free",
-				"openai/gpt-oss-120b:free",
 				"z-ai/glm-4.5-air:free",
+				// "openai/gpt-oss-20b:free",
 			],
 			ensembleThreshold: 0.6,
 		});
@@ -125,13 +126,29 @@ export class AuditOrchestrator {
 				};
 			}
 
+			// Decrypt the contract source code for analysis
+			let decryptedSourceCode: string;
+			try {
+				// The source_code field contains encrypted data as JSON string
+				const encryptedContract = JSON.parse(contract.source_code);
+				decryptedSourceCode =
+					encryptionService.decryptContract(encryptedContract);
+			} catch (error) {
+				// If decryption fails, assume it's plain text (for backward compatibility)
+				console.warn(
+					"Failed to decrypt contract source code, assuming plain text:",
+					error
+				);
+				decryptedSourceCode = contract.source_code;
+			}
+
 			// Prepare job data
 			const jobData = {
 				auditId: audit.id,
 				contractId: request.contractId,
 				userId: request.userId,
 				contractName: contract.name,
-				sourceCode: contract.source_code,
+				sourceCode: decryptedSourceCode,
 				options: request.options,
 			};
 

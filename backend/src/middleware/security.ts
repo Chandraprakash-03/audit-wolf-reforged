@@ -164,19 +164,62 @@ export const validateContractInput = [
 		.trim()
 		.isLength({ min: 10, max: 1000000 })
 		.withMessage("Source code must be between 10 and 1,000,000 characters")
-		.custom((value) => {
-			// Basic Solidity validation
+		.custom((value, { req }) => {
+			// Platform-aware validation
+			const platform = req.body.platform || "ethereum";
+			const language = req.body.language || "solidity";
+
+			// Platform-specific validation
 			if (
-				!value.includes("contract") &&
-				!value.includes("library") &&
-				!value.includes("interface")
+				language === "solidity" ||
+				["ethereum", "bsc", "polygon"].includes(platform)
 			) {
-				throw new Error(
-					"Source code must contain a valid Solidity contract, library, or interface"
-				);
+				// Solidity validation
+				if (
+					!value.includes("contract") &&
+					!value.includes("library") &&
+					!value.includes("interface")
+				) {
+					throw new Error(
+						"Source code must contain a valid Solidity contract, library, or interface"
+					);
+				}
+			} else if (language === "rust" || platform === "solana") {
+				// Rust/Anchor validation
+				if (
+					!value.includes("fn") &&
+					!value.includes("mod") &&
+					!value.includes("use")
+				) {
+					throw new Error(
+						"Source code must contain valid Rust/Anchor code with functions, modules, or imports"
+					);
+				}
+			} else if (language === "haskell" || platform === "cardano") {
+				// Haskell/Plutus validation
+				if (
+					!value.includes("module") &&
+					!value.includes("import") &&
+					!value.includes("data")
+				) {
+					throw new Error(
+						"Source code must contain valid Haskell/Plutus code with modules, imports, or data types"
+					);
+				}
+			} else if (language === "move" || ["aptos", "sui"].includes(platform)) {
+				// Move validation
+				if (
+					!value.includes("module") &&
+					!value.includes("fun") &&
+					!value.includes("struct")
+				) {
+					throw new Error(
+						"Source code must contain valid Move code with modules, functions, or structs"
+					);
+				}
 			}
 
-			// Check for potentially dangerous patterns
+			// Check for potentially dangerous patterns (universal)
 			const dangerousPatterns = [
 				/eval\s*\(/i,
 				/exec\s*\(/i,
@@ -200,6 +243,16 @@ export const validateContractInput = [
 		.optional()
 		.matches(/^\d+\.\d+(\.\d+)?$/)
 		.withMessage("Invalid compiler version format"),
+
+	body("platform")
+		.optional()
+		.isIn(["ethereum", "bsc", "polygon", "solana", "cardano", "aptos", "sui"])
+		.withMessage("Invalid blockchain platform"),
+
+	body("language")
+		.optional()
+		.isIn(["solidity", "rust", "haskell", "move"])
+		.withMessage("Invalid programming language"),
 ];
 
 /**

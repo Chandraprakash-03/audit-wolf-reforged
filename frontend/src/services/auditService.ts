@@ -10,6 +10,10 @@ export interface AuditFilters {
 	dateTo?: string;
 	page?: number;
 	limit?: number;
+	// Multi-blockchain filters
+	platform?: string;
+	language?: string;
+	auditType?: "single" | "multi" | "cross-chain" | "all";
 }
 
 export interface CreateAuditRequest {
@@ -72,6 +76,9 @@ class AuditService {
 		if (filters.dateTo) params.append("dateTo", filters.dateTo);
 		if (filters.page) params.append("page", filters.page.toString());
 		if (filters.limit) params.append("limit", filters.limit.toString());
+		if (filters.platform) params.append("platform", filters.platform);
+		if (filters.language) params.append("language", filters.language);
+		if (filters.auditType) params.append("auditType", filters.auditType);
 
 		const queryString = params.toString();
 		const endpoint = `/api/audits${queryString ? `?${queryString}` : ""}`;
@@ -144,6 +151,54 @@ class AuditService {
 		return this.makeRequest<void>(`/api/audits/${id}`, {
 			method: "DELETE",
 		});
+	}
+
+	// Multi-blockchain audit methods
+	async getMultiChainAudits(
+		filters: AuditFilters = {}
+	): Promise<ApiResponse<PaginatedResponse<any>>> {
+		const params = new URLSearchParams();
+
+		if (filters.status) params.append("status", filters.status);
+		if (filters.dateFrom) params.append("dateFrom", filters.dateFrom);
+		if (filters.dateTo) params.append("dateTo", filters.dateTo);
+		if (filters.page) params.append("page", filters.page.toString());
+		if (filters.limit) params.append("limit", filters.limit.toString());
+		if (filters.platform) params.append("platform", filters.platform);
+		if (filters.auditType) params.append("auditType", filters.auditType);
+
+		const queryString = params.toString();
+		const endpoint = `/api/multi-blockchain/audits${
+			queryString ? `?${queryString}` : ""
+		}`;
+
+		return this.makeRequest<PaginatedResponse<any>>(endpoint);
+	}
+
+	async getMultiChainAudit(id: string): Promise<ApiResponse<any>> {
+		return this.makeRequest<any>(`/api/multi-blockchain/audits/${id}`);
+	}
+
+	async getAuditStatistics(
+		filters: AuditFilters = {}
+	): Promise<ApiResponse<any>> {
+		const params = new URLSearchParams();
+
+		if (filters.dateFrom) params.append("dateFrom", filters.dateFrom);
+		if (filters.dateTo) params.append("dateTo", filters.dateTo);
+		if (filters.platform) params.append("platform", filters.platform);
+		if (filters.language) params.append("language", filters.language);
+
+		const queryString = params.toString();
+		const endpoint = `/api/audits/statistics${
+			queryString ? `?${queryString}` : ""
+		}`;
+
+		return this.makeRequest<any>(endpoint);
+	}
+
+	async getPlatformStatistics(): Promise<ApiResponse<any>> {
+		return this.makeRequest<any>("/api/multi-blockchain/platforms/statistics");
 	}
 }
 

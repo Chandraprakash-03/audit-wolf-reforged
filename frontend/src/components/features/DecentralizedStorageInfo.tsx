@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { apiCall } from "@/utils/api";
 import {
 	Card,
 	CardContent,
@@ -72,17 +73,7 @@ export default function DecentralizedStorageInfo({
 	const fetchStorageStats = async () => {
 		try {
 			setLoading(true);
-			const response = await fetch("/api/storage/stats", {
-				headers: {
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
-			});
-
-			if (!response.ok) {
-				throw new Error("Failed to fetch storage stats");
-			}
-
-			const data = await response.json();
+			const data = await apiCall("/api/storage/stats");
 			setStats(data.data);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Unknown error");
@@ -96,17 +87,7 @@ export default function DecentralizedStorageInfo({
 
 		try {
 			setLoading(true);
-			const response = await fetch(`/api/storage/verify/${auditId}`, {
-				headers: {
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
-			});
-
-			if (!response.ok) {
-				throw new Error("Failed to verify audit integrity");
-			}
-
-			const data = await response.json();
+			const data = await apiCall(`/api/storage/verify/${auditId}`);
 			setVerification(data.data);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Unknown error");
@@ -118,20 +99,10 @@ export default function DecentralizedStorageInfo({
 	const migrateToDecentralizedStorage = async () => {
 		try {
 			setLoading(true);
-			const response = await fetch("/api/storage/migrate", {
+			const data = await apiCall("/api/storage/migrate", {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
 				body: JSON.stringify({ batchSize: 10 }),
 			});
-
-			if (!response.ok) {
-				throw new Error("Failed to migrate to decentralized storage");
-			}
-
-			const data = await response.json();
 			setMigrationProgress(data.data);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Unknown error");
@@ -145,24 +116,14 @@ export default function DecentralizedStorageInfo({
 
 		try {
 			setLoading(true);
-			const response = await fetch(`/api/storage/store/${auditId}`, {
+			await apiCall(`/api/storage/store/${auditId}`, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
 				body: JSON.stringify({
 					useIPFS: true,
 					useBlockchain: true,
 					fallbackToDatabase: true,
 				}),
 			});
-
-			if (!response.ok) {
-				throw new Error("Failed to store in decentralized storage");
-			}
-
-			await response.json();
 
 			// Refresh stats and verification after storage
 			await fetchStorageStats();

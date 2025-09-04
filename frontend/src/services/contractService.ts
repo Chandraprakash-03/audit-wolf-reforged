@@ -7,6 +7,9 @@ export interface CreateContractRequest {
 	name: string;
 	sourceCode: string;
 	compilerVersion?: string;
+	platforms?: string[];
+	crossChainAnalysis?: boolean;
+	dependencies?: any[];
 }
 
 export interface ContractValidationResponse {
@@ -67,20 +70,36 @@ class ContractService {
 	async createContract(
 		contractData: CreateContractRequest
 	): Promise<ApiResponse<Contract>> {
+		// Determine platform and language from the platforms array
+		const platform = contractData.platforms?.[0] || "ethereum";
+		const language = this.getLanguageFromPlatform(platform);
+
 		return this.makeRequest<Contract>("/api/contracts", {
 			method: "POST",
-			body: JSON.stringify(contractData),
+			body: JSON.stringify({
+				...contractData,
+				platform,
+				language,
+			}),
 		});
 	}
 
 	async validateContract(
-		sourceCode: string
+		sourceCode: string,
+		platform?: string
 	): Promise<ApiResponse<ContractValidationResponse>> {
+		const contractPlatform = platform || "ethereum";
+		const language = this.getLanguageFromPlatform(contractPlatform);
+
 		return this.makeRequest<ContractValidationResponse>(
 			"/api/contracts/validate",
 			{
 				method: "POST",
-				body: JSON.stringify({ sourceCode }),
+				body: JSON.stringify({
+					sourceCode,
+					platform: contractPlatform,
+					language,
+				}),
 			}
 		);
 	}
@@ -107,6 +126,24 @@ class ContractService {
 			method: "PATCH",
 			body: JSON.stringify(updates),
 		});
+	}
+
+	private getLanguageFromPlatform(platform: string): string {
+		switch (platform) {
+			case "ethereum":
+			case "bsc":
+			case "polygon":
+				return "solidity";
+			case "solana":
+				return "rust";
+			case "cardano":
+				return "haskell";
+			case "aptos":
+			case "sui":
+				return "move";
+			default:
+				return "solidity";
+		}
 	}
 }
 

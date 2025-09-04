@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 // import { AuthGuard } from "@/components/features/auth/AuthGuard";
 import { AuditDashboard } from "@/components/features/audits/AuditDashboard";
 import { Button } from "@/components/ui/button";
+import { Navigation } from "@/components/ui/navigation";
 import Link from "next/link";
 import { AuthGuard } from "@/components/features/auth";
 
@@ -23,13 +24,16 @@ export default function DashboardPage() {
 
 	return (
 		<AuthGuard requireAuth={true}>
-			<div className="min-h-screen bg-gray-50">
-				<header className="bg-white shadow">
+			<div className="min-h-screen bg-background">
+				<Navigation />
+				<header className="bg-card shadow border-b border-border">
 					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 						<div className="flex justify-between items-center py-6">
 							<div>
-								<h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-								<p className="text-gray-600">
+								<h1 className="text-3xl font-bold text-foreground">
+									Dashboard
+								</h1>
+								<p className="text-muted-foreground">
 									Welcome back,{" "}
 									{typeof user === "object" && user !== null && "name" in user
 										? user.name || user.email || "User"

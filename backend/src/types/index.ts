@@ -130,3 +130,6 @@ export interface QualityMetrics {
 	readability: number;
 	test_coverage: number;
 }
+
+// Re-export blockchain types
+export * from "./blockchain";

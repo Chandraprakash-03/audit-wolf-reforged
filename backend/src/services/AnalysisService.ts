@@ -5,6 +5,7 @@ import {
 } from "./SlitherAnalyzer";
 import { AIAnalyzer, AIAnalysisOptions } from "./AIAnalyzer";
 import { DatabaseService } from "./database";
+import { encryptionService } from "./EncryptionService";
 import {
 	Contract,
 	Audit,
@@ -42,13 +43,31 @@ export class AnalysisService {
 			maxTokens: 4000,
 			temperature: 0.1,
 			models: [
-				"deepseek/deepseek-chat-v3.1:free",
+				// "deepseek/deepseek-chat-v3.1:free",
 				"moonshotai/kimi-k2:free",
-				"openai/gpt-oss-120b:free",
 				"z-ai/glm-4.5-air:free",
+				// "openai/gpt-oss-20b:free",
 			],
 			ensembleThreshold: 0.6,
 		});
+	}
+
+	/**
+	 * Helper method to decrypt contract source code
+	 */
+	private decryptContractSourceCode(contract: Contract): string {
+		try {
+			// The source_code field contains encrypted data as JSON string
+			const encryptedContract = JSON.parse(contract.source_code);
+			return encryptionService.decryptContract(encryptedContract);
+		} catch (error) {
+			// If decryption fails, assume it's plain text (for backward compatibility)
+			console.warn(
+				"Failed to decrypt contract source code, assuming plain text:",
+				error
+			);
+			return contract.source_code;
+		}
 	}
 
 	/**
@@ -128,9 +147,12 @@ export class AnalysisService {
 				progress: 10,
 			});
 
+			// Decrypt contract source code for analysis
+			const decryptedSourceCode = this.decryptContractSourceCode(contract);
+
 			// Run Slither analysis
 			const slitherResult = await this.slitherAnalyzer.analyzeContract(
-				contract.source_code,
+				decryptedSourceCode,
 				contract.name
 			);
 
@@ -166,10 +188,9 @@ export class AnalysisService {
 					gas_analysis: [],
 					complexity: {
 						cyclomatic_complexity: 1, // TODO: Calculate from AST
-						lines_of_code: contract.source_code.split("\n").length,
-						function_count: (
-							contract.source_code.match(/function\s+\w+/g) || []
-						).length,
+						lines_of_code: decryptedSourceCode.split("\n").length,
+						function_count: (decryptedSourceCode.match(/function\s+\w+/g) || [])
+							.length,
 					},
 					// Store additional metadata as any to allow extra properties
 					executionTime: slitherResult.executionTime,
@@ -589,6 +610,9 @@ export class AnalysisService {
 				progress: 10,
 			});
 
+			// Decrypt contract source code for analysis
+			const decryptedSourceCode = this.decryptContractSourceCode(contract);
+
 			// Configure AI analysis options
 			const aiOptions: AIAnalysisOptions = {
 				includeRecommendations: true,
@@ -605,7 +629,7 @@ export class AnalysisService {
 
 			// Run AI analysis
 			const aiResult = await this.aiAnalyzer.analyzeContract(
-				contract.source_code,
+				decryptedSourceCode,
 				contract.name,
 				aiOptions
 			);
@@ -664,6 +688,9 @@ export class AnalysisService {
 				progress: 5,
 			});
 
+			// Decrypt contract source code for analysis
+			const decryptedSourceCode = this.decryptContractSourceCode(contract);
+
 			// Run static analysis first
 			await this.updateAuditStatus(auditId, "analyzing", {
 				currentStep: "Running static analysis (Slither)",
@@ -671,7 +698,7 @@ export class AnalysisService {
 			});
 
 			const slitherResult = await this.slitherAnalyzer.analyzeContract(
-				contract.source_code,
+				decryptedSourceCode,
 				contract.name
 			);
 
@@ -695,7 +722,7 @@ export class AnalysisService {
 			};
 
 			const aiResult = await this.aiAnalyzer.analyzeContract(
-				contract.source_code,
+				decryptedSourceCode,
 				contract.name,
 				aiOptions
 			);
@@ -742,9 +769,9 @@ export class AnalysisService {
 						gas_analysis: [],
 						complexity: {
 							cyclomatic_complexity: 1,
-							lines_of_code: contract.source_code.split("\n").length,
+							lines_of_code: decryptedSourceCode.split("\n").length,
 							function_count: (
-								contract.source_code.match(/function\s+\w+/g) || []
+								decryptedSourceCode.match(/function\s+\w+/g) || []
 							).length,
 						},
 						executionTime: slitherResult.executionTime,

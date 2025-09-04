@@ -5,18 +5,23 @@ import { useRouter } from "next/navigation";
 import { ContractUploader } from "@/components/features/contracts";
 import { contractService } from "@/services/contractService";
 import { useAuth } from "@/hooks/useAuth";
-import { AuthGuard } from "@/components/features/auth";
+import { Navigation } from "@/components/ui/navigation";
+import { ContractInput } from "@/types";
+// import { AuthGuard } from "@/components/features/auth";
 
 export default function UploadPage() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
-	const { user } = useAuth();
+	// const { user } = useAuth();
 
 	const handleContractSubmit = async (contract: {
 		name: string;
 		sourceCode: string;
 		compilerVersion?: string;
+		platforms?: string[];
+		crossChainAnalysis?: boolean;
+		dependencies?: ContractInput[];
 	}) => {
 		setIsLoading(true);
 		setError(null);
@@ -26,13 +31,20 @@ export default function UploadPage() {
 				name: contract.name,
 				sourceCode: contract.sourceCode,
 				compilerVersion: contract.compilerVersion,
+				platforms: contract.platforms,
+				crossChainAnalysis: contract.crossChainAnalysis,
+				dependencies: contract.dependencies,
 			});
 
 			if (response.success && response.data) {
 				// Redirect to audit page or dashboard
 				router.push(`/dashboard?contract=${response.data.id}`);
 			} else {
-				setError(response.error || "Failed to upload contract");
+				const errorMessage =
+					typeof response.error === "string"
+						? response.error
+						: response.error?.message || "Failed to upload contract";
+				setError(errorMessage);
 			}
 		} catch (err) {
 			setError(
@@ -45,25 +57,26 @@ export default function UploadPage() {
 
 	return (
 		// <AuthGuard>
-		<div className="min-h-screen bg-gray-50 py-8">
-			<div className="container mx-auto px-4">
+		<div className="min-h-screen bg-background">
+			<Navigation />
+			<div className="container mx-auto px-4 py-8">
 				<div className="mb-8 text-center">
-					<h1 className="text-3xl font-bold text-gray-900 mb-2">
+					<h1 className="text-3xl font-bold text-foreground mb-2">
 						Upload Smart Contract
 					</h1>
-					<p className="text-gray-600">
-						Upload your Solidity contract to start a comprehensive security
-						audit
+					<p className="text-muted-foreground">
+						Upload your smart contract from any supported blockchain platform to
+						start a comprehensive security audit
 					</p>
 				</div>
 
 				{error && (
 					<div className="mb-6 max-w-4xl mx-auto">
-						<div className="bg-red-50 border border-red-200 rounded-md p-4">
+						<div className="bg-destructive/10 border border-destructive/20 rounded-md p-4">
 							<div className="flex">
 								<div className="flex-shrink-0">
 									<svg
-										className="h-5 w-5 text-red-400"
+										className="h-5 w-5 text-destructive"
 										viewBox="0 0 20 20"
 										fill="currentColor"
 									>
@@ -75,10 +88,10 @@ export default function UploadPage() {
 									</svg>
 								</div>
 								<div className="ml-3">
-									<h3 className="text-sm font-medium text-red-800">
+									<h3 className="text-sm font-medium text-destructive">
 										Upload Failed
 									</h3>
-									<div className="mt-2 text-sm text-red-700">
+									<div className="mt-2 text-sm text-destructive/80">
 										<p>{error}</p>
 									</div>
 								</div>
@@ -93,11 +106,11 @@ export default function UploadPage() {
 				/>
 
 				<div className="mt-8 max-w-4xl mx-auto">
-					<div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+					<div className="bg-primary/10 border border-primary/20 rounded-md p-4">
 						<div className="flex">
 							<div className="flex-shrink-0">
 								<svg
-									className="h-5 w-5 text-blue-400"
+									className="h-5 w-5 text-primary"
 									viewBox="0 0 20 20"
 									fill="currentColor"
 								>
@@ -109,18 +122,34 @@ export default function UploadPage() {
 								</svg>
 							</div>
 							<div className="ml-3">
-								<h3 className="text-sm font-medium text-blue-800">
+								<h3 className="text-sm font-medium text-primary">
 									What happens next?
 								</h3>
-								<div className="mt-2 text-sm text-blue-700">
+								<div className="mt-2 text-sm text-primary/80">
 									<ul className="list-disc list-inside space-y-1">
-										<li>Your contract will be validated for syntax errors</li>
-										<li>Static analysis will be performed using Slither</li>
+										<li>
+											Your contract will be validated for platform-specific
+											syntax and security patterns
+										</li>
+										<li>
+											Static analysis will be performed using
+											blockchain-specific tools
+										</li>
 										<li>
 											AI-powered security analysis will identify vulnerabilities
+											and best practices
 										</li>
-										<li>A comprehensive audit report will be generated</li>
-										<li>You'll receive an email notification when complete</li>
+										<li>
+											Cross-chain analysis will be performed if multiple
+											platforms are selected
+										</li>
+										<li>
+											A comprehensive audit report will be generated with
+											platform-specific recommendations
+										</li>
+										<li>
+											You&apos;ll receive an email notification when complete
+										</li>
 									</ul>
 								</div>
 							</div>

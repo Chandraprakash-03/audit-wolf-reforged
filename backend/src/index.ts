@@ -8,11 +8,13 @@ import authRoutes from "./routes/auth";
 import contractRoutes from "./routes/contracts";
 import auditRoutes from "./routes/audits";
 import analysisRoutes from "./routes/analysis";
+import multiBlockchainRoutes from "./routes/multi-blockchain";
 import queueRoutes from "./routes/queue";
 import reportRoutes from "./routes/reports";
 import notificationRoutes from "./routes/notifications";
 import storageRoutes from "./routes/storage";
 import adminRoutes from "./routes/admin";
+import platformManagementRoutes from "./routes/platform-management";
 import { WebSocketService } from "./services/WebSocketService";
 import { AuditOrchestrator } from "./services/AuditOrchestrator";
 import { dbOptimizationService } from "./services/DatabaseOptimizationService";
@@ -231,6 +233,17 @@ app.use(
 	analysisRoutes
 );
 
+// Multi-blockchain routes with rate limiting
+app.use(
+	"/api/multi-blockchain",
+	createRateLimit({
+		windowMs: 60 * 60 * 1000, // 1 hour
+		max: 30, // Limit multi-blockchain requests to 30 per hour
+		message: "Too many multi-blockchain requests, please try again later",
+	}),
+	multiBlockchainRoutes
+);
+
 // Queue routes
 app.use("/api/queue", queueRoutes);
 
@@ -248,6 +261,13 @@ app.use(
 	"/api/admin",
 	cacheMiddleware(60), // Cache admin responses for 1 minute
 	adminRoutes
+);
+
+// Platform management routes with caching
+app.use(
+	"/api/admin/platform-management",
+	cacheMiddleware(30), // Cache platform management responses for 30 seconds
+	platformManagementRoutes
 );
 
 // Error handling middleware (must be after all routes)

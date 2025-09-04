@@ -96,7 +96,7 @@ export function LoginForm({
 			<CardContent>
 				<form onSubmit={handleSubmit} className="space-y-4">
 					{errors.general && (
-						<div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+						<div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
 							{errors.general}
 						</div>
 					)}
@@ -109,11 +109,11 @@ export function LoginForm({
 							placeholder="Enter your email"
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
-							className={errors.email ? "border-red-500" : ""}
+							className={errors.email ? "border-destructive" : ""}
 							disabled={isLoading}
 						/>
 						{errors.email && (
-							<p className="text-sm text-red-600">{errors.email}</p>
+							<p className="text-sm text-destructive">{errors.email}</p>
 						)}
 					</div>
 
@@ -125,11 +125,11 @@ export function LoginForm({
 							placeholder="Enter your password"
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
-							className={errors.password ? "border-red-500" : ""}
+							className={errors.password ? "border-destructive" : ""}
 							disabled={isLoading}
 						/>
 						{errors.password && (
-							<p className="text-sm text-red-600">{errors.password}</p>
+							<p className="text-sm text-destructive">{errors.password}</p>
 						)}
 					</div>
 
@@ -141,7 +141,7 @@ export function LoginForm({
 				<div className="mt-6 text-center space-y-2">
 					<button
 						type="button"
-						className="text-sm text-blue-600 hover:text-blue-800 underline"
+						className="text-sm text-primary hover:text-primary/80 underline"
 						onClick={() => {
 							// TODO: Implement forgot password modal
 							console.log("Forgot password clicked");
@@ -151,12 +151,12 @@ export function LoginForm({
 					</button>
 
 					{onToggleMode && (
-						<div className="text-sm text-gray-600">
+						<div className="text-sm text-muted-foreground">
 							Don't have an account?{" "}
 							<button
 								type="button"
 								onClick={onToggleMode}
-								className="text-blue-600 hover:text-blue-800 underline"
+								className="text-primary hover:text-primary/80 underline"
 							>
 								Sign up
 							</button>

@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 							id: session.user.id,
 							email: session.user.email!,
 							name: session.user.user_metadata?.name || "",
+							role: session.user.user_metadata?.role || "",
 							created_at: session.user.created_at,
 					  }
 					: null;
@@ -67,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 						id: session.user.id,
 						email: session.user.email!,
 						name: session.user.user_metadata?.name || "",
+						role: session.user.user_metadata?.role || "",
 						created_at: session.user.created_at,
 				  }
 				: null;

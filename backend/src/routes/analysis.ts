@@ -13,6 +13,10 @@ const validateAnalysisRequest = [
 	body("analysisType")
 		.isIn(["static", "ai", "full"])
 		.withMessage("Analysis type must be 'static', 'ai', or 'full'"),
+	body("platform")
+		.optional()
+		.isString()
+		.withMessage("Platform must be a string"),
 	body("priority")
 		.optional()
 		.isIn([1, 5, 10, 15])
@@ -55,7 +59,8 @@ router.post(
 				});
 			}
 
-			const { contractId, analysisType, priority, options } = req.body;
+			const { contractId, analysisType, platform, priority, options } =
+				req.body;
 			const userId = req.user?.id;
 
 			if (!userId) {
@@ -73,6 +78,7 @@ router.post(
 				contractId,
 				userId,
 				analysisType,
+				platform,
 				priority: priority || JobPriority.NORMAL,
 				options,
 			});
@@ -325,6 +331,186 @@ router.post(
 			});
 		} catch (error) {
 			console.error("Error cancelling analysis:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+		return () => {};
+	}
+);
+
+/**
+ * Start cross-chain analysis
+ * POST /api/analysis/cross-chain/start
+ */
+router.post(
+	"/cross-chain/start",
+	authenticateToken,
+	[
+		body("auditName")
+			.trim()
+			.isLength({ min: 1, max: 100 })
+			.withMessage("Audit name must be between 1 and 100 characters"),
+		body("platforms")
+			.isArray({ min: 2 })
+			.withMessage(
+				"At least 2 platforms must be specified for cross-chain analysis"
+			),
+		body("contracts")
+			.isArray({ min: 1 })
+			.withMessage("At least 1 contract must be provided"),
+		body("crossChainAnalysis")
+			.optional()
+			.isBoolean()
+			.withMessage("crossChainAnalysis must be a boolean"),
+		body("analysisOptions")
+			.optional()
+			.isObject()
+			.withMessage("analysisOptions must be an object"),
+	],
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const errors = validationResult(req);
+			if (!errors.isEmpty()) {
+				return res.status(400).json({
+					success: false,
+					error: "Validation failed",
+					details: errors.array(),
+				});
+			}
+
+			const {
+				auditName,
+				platforms,
+				contracts,
+				crossChainAnalysis = true,
+				analysisOptions = {},
+			} = req.body;
+			const userId = req.user!.id;
+
+			// Import MultiChainAnalysisOrchestrator
+			const { MultiChainAnalysisOrchestrator } = await import(
+				"../services/MultiChainAnalysisOrchestrator"
+			);
+			const { WebSocketService } = await import("../services/WebSocketService");
+
+			// Create a mock WebSocket service for now
+			const mockWsService = {
+				notifyMultiChainProgress: () => {},
+				notifyAuditProgress: () => {},
+				notifyAuditComplete: () => {},
+				notifyError: () => {},
+			} as any;
+
+			const orchestrator = new MultiChainAnalysisOrchestrator(mockWsService);
+
+			const result = await orchestrator.startMultiChainAnalysis({
+				userId,
+				auditName,
+				analysisRequest: {
+					contracts,
+					platforms,
+					analysisOptions: {
+						includeStaticAnalysis:
+							analysisOptions.includeStaticAnalysis ?? true,
+						includeAIAnalysis: analysisOptions.includeAIAnalysis ?? false,
+						severityThreshold: analysisOptions.severityThreshold ?? "low",
+						enabledDetectors: analysisOptions.enabledDetectors ?? [],
+						disabledDetectors: analysisOptions.disabledDetectors ?? [],
+						timeout: analysisOptions.timeout ?? 300000, // 5 minutes
+						maxFileSize: analysisOptions.maxFileSize ?? 10485760, // 10MB
+					},
+					crossChainAnalysis,
+				},
+			});
+
+			if (result.success) {
+				res.status(202).json({
+					success: true,
+					message: "Cross-chain analysis started successfully",
+					data: {
+						multiChainAuditId: result.multiChainAuditId,
+						jobId: result.jobId,
+					},
+				});
+			} else {
+				res.status(400).json({
+					success: false,
+					error: result.error || "Failed to start cross-chain analysis",
+				});
+			}
+		} catch (error) {
+			console.error("Cross-chain analysis error:", error);
+			res.status(500).json({
+				success: false,
+				error: "Internal server error",
+			});
+		}
+
+		return () => {};
+	}
+);
+
+/**
+ * Get cross-chain analysis progress
+ * GET /api/analysis/cross-chain/:multiChainAuditId/progress
+ */
+router.get(
+	"/cross-chain/:multiChainAuditId/progress",
+	authenticateToken,
+	[
+		param("multiChainAuditId")
+			.isUUID()
+			.withMessage("Invalid multi-chain audit ID format"),
+	],
+	async (req: AuthenticatedRequest, res: Response) => {
+		try {
+			const errors = validationResult(req);
+			if (!errors.isEmpty()) {
+				return res.status(400).json({
+					success: false,
+					error: "Validation failed",
+					details: errors.array(),
+				});
+			}
+
+			const { multiChainAuditId } = req.params;
+			const userId = req.user!.id;
+
+			// Import MultiChainAnalysisOrchestrator
+			const { MultiChainAnalysisOrchestrator } = await import(
+				"../services/MultiChainAnalysisOrchestrator"
+			);
+
+			// Create a mock WebSocket service for now
+			const mockWsService = {
+				notifyMultiChainProgress: () => {},
+				notifyAuditProgress: () => {},
+				notifyAuditComplete: () => {},
+				notifyError: () => {},
+			} as any;
+
+			const orchestrator = new MultiChainAnalysisOrchestrator(mockWsService);
+
+			const result = await orchestrator.getAnalysisProgress(
+				multiChainAuditId,
+				userId
+			);
+
+			if (result.success) {
+				res.json({
+					success: true,
+					data: result.progress,
+				});
+			} else {
+				res.status(404).json({
+					success: false,
+					error: result.error || "Progress not found",
+				});
+			}
+		} catch (error) {
+			console.error("Get cross-chain progress error:", error);
 			res.status(500).json({
 				success: false,
 				error: "Internal server error",

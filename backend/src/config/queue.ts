@@ -34,6 +34,9 @@ export enum JobType {
 	STATIC_ANALYSIS = "static_analysis",
 	AI_ANALYSIS = "ai_analysis",
 	FULL_ANALYSIS = "full_analysis",
+	MULTI_CHAIN_ANALYSIS = "multi_chain_analysis",
+	PLATFORM_ANALYSIS = "platform_analysis",
+	CROSS_CHAIN_ANALYSIS = "cross_chain_analysis",
 }
 
 // Job data interfaces
@@ -71,6 +74,31 @@ export interface FullAnalysisJobData {
 		focusAreas?: string[];
 		severityThreshold?: string;
 	};
+}
+
+// Multi-chain job data interfaces
+export interface MultiChainAnalysisJobData {
+	multiChainAuditId: string;
+	userId: string;
+	auditName: string;
+	platforms: string[];
+	contracts: Record<string, any>;
+	crossChainAnalysis: boolean;
+	analysisOptions: Record<string, any>;
+}
+
+export interface PlatformAnalysisJobData {
+	multiChainAuditId: string;
+	userId: string;
+	platform: string;
+	contracts: any[];
+	analysisOptions: Record<string, any>;
+}
+
+export interface CrossChainAnalysisJobData {
+	multiChainAuditId: string;
+	userId: string;
+	platformResults: Record<string, any>;
 }
 
 // Job priority levels

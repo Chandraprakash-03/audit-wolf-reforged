@@ -40,7 +40,7 @@ export function FeaturesSection() {
 			icon: Database,
 			title: "Decentralized Storage",
 			description:
-				"Secure audit records stored on IPFS with blockchain verification for transparency.",
+				"Secure audit records stored on IPFS, verified on blockchain for tamper-proof transparency and trust.",
 		},
 	];
 

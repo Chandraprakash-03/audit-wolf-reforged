@@ -97,6 +97,7 @@ export interface AuditReport {
 	medium_count: number;
 	low_count: number;
 	informational_count: number;
+	vulnerabilities?: Vulnerability[]; // Optional for backward compatibility
 	gas_optimizations: GasOptimization[];
 	recommendations: SecurityRecommendation[];
 	generated_at: Date;

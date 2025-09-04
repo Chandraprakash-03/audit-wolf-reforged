@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { apiCall } from "@/utils/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,38 +80,26 @@ export const PerformanceDashboard: React.FC = () => {
 		try {
 			setError(null);
 
-			const [systemRes, auditRes, cacheRes, dbRes] = await Promise.all([
-				fetch("/api/admin/metrics/system", {
-					headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-				}),
-				fetch("/api/admin/metrics/audits", {
-					headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-				}),
-				fetch("/api/admin/metrics/cache", {
-					headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-				}),
-				fetch("/api/admin/metrics/database", {
-					headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-				}),
+			const [systemData, auditData, cacheData, dbData] = await Promise.all([
+				apiCall("/api/admin/metrics/system").catch(() => null),
+				apiCall("/api/admin/metrics/audits").catch(() => null),
+				apiCall("/api/admin/metrics/cache").catch(() => null),
+				apiCall("/api/admin/metrics/database").catch(() => null),
 			]);
 
-			if (systemRes.ok) {
-				const systemData = await systemRes.json();
+			if (systemData) {
 				setSystemMetrics(systemData);
 			}
 
-			if (auditRes.ok) {
-				const auditData = await auditRes.json();
+			if (auditData) {
 				setAuditMetrics(auditData);
 			}
 
-			if (cacheRes.ok) {
-				const cacheData = await cacheRes.json();
+			if (cacheData) {
 				setCacheStats(cacheData);
 			}
 
-			if (dbRes.ok) {
-				const dbData = await dbRes.json();
+			if (dbData) {
 				setDatabaseStats(dbData);
 			}
 		} catch (err) {

@@ -15,6 +15,12 @@ export type {
 	AIVulnerability,
 	SecurityRecommendation,
 	QualityMetrics,
+	BlockchainPlatform,
+	ValidationResult,
+	PlatformVulnerability,
+	MultiChainAnalysisRequest,
+	MultiChainAnalysisResult,
+	AnalysisOptions,
 } from "../../../backend/src/types";
 
 // Frontend-specific types
@@ -23,6 +29,57 @@ export interface ContractUploadState {
 	code: string;
 	isValid: boolean;
 	errors: string[];
+	warnings?: string[];
+	detectedLanguage?: string;
+	suggestedPlatforms?: string[];
+}
+
+// Multi-blockchain audit types
+export interface MultiChainAudit {
+	id: string;
+	user_id: string;
+	audit_name: string;
+	platforms: string[];
+	contracts: Record<string, any>;
+	cross_chain_analysis: boolean;
+	status: "pending" | "analyzing" | "completed" | "failed";
+	results?: Record<string, any>;
+	cross_chain_results?: Record<string, any>;
+	created_at: Date;
+	completed_at?: Date;
+}
+
+export interface PlatformVulnerability {
+	id: string;
+	audit_id?: string;
+	multi_chain_audit_id?: string;
+	platform: string;
+	vulnerability_type: string;
+	severity: "critical" | "high" | "medium" | "low" | "informational";
+	title: string;
+	description: string;
+	location: any;
+	recommendation: string;
+	platform_specific_data?: Record<string, any>;
+	confidence: number;
+	source: "static" | "ai" | "combined";
+	created_at: Date;
+}
+
+export interface MultiChainContractUploadState {
+	contracts: ContractUploadState[];
+	selectedPlatforms: string[];
+	crossChainAnalysis: boolean;
+	dependencies: ContractInput[];
+}
+
+// Temporary interface until backend types are properly imported
+export interface ContractInput {
+	code: string;
+	filename: string;
+	platform: string;
+	language?: string;
+	dependencies?: ContractInput[];
 }
 
 export interface AuditProgress {

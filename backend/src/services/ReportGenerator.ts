@@ -1,11 +1,14 @@
 import { AuditModel } from "../models/Audit";
 import { ContractModel } from "../models/Contract";
 import { VulnerabilityModel } from "../models/Vulnerability";
+import { MultiChainAuditModel } from "../models/MultiChainAudit";
 import {
 	AuditReport,
 	GasOptimization,
 	SecurityRecommendation,
 } from "../types/database";
+import { MultiChainReportGenerator } from "./MultiChainReportGenerator";
+import { MultiChainAuditReportService } from "./MultiChainAuditReportService";
 
 export interface ReportData {
 	audit: AuditModel;
@@ -25,6 +28,39 @@ export interface GeneratedReport {
 }
 
 export class ReportGenerator {
+	/**
+	 * Factory method to determine report type and generate appropriate report
+	 */
+	static async generateReportForAudit(
+		auditId: string,
+		format: "html" | "pdf" | "both" = "both"
+	): Promise<any> {
+		// Check if it's a multi-chain audit
+		const multiChainAudit = await MultiChainAuditModel.findById(auditId);
+		if (multiChainAudit) {
+			return MultiChainAuditReportService.generateMultiChainAuditReport({
+				auditId,
+				format,
+				reportType: "standard",
+			});
+		}
+
+		// Fall back to single-chain audit
+		const audit = await AuditModel.findById(auditId);
+		if (!audit) {
+			throw new Error("Audit not found");
+		}
+
+		const contract = await ContractModel.findById(audit.contract_id);
+		if (!contract) {
+			throw new Error("Contract not found");
+		}
+
+		const vulnerabilities = await VulnerabilityModel.findByAuditId(auditId);
+
+		return this.generateReport({ audit, contract, vulnerabilities });
+	}
+
 	/**
 	 * Generate a comprehensive audit report
 	 */
@@ -831,7 +867,9 @@ Generate HTML content for PDF conversion
                 <tr><td><strong>Compiler Version</strong></td><td>${
 									contract.compiler_version
 								}</td></tr>
-                <tr><td><strong>Created</strong></td><td>${contract.created_at.toLocaleDateString()}</td></tr>
+                <tr><td><strong>Created</strong></td><td>${new Date(
+									contract.created_at
+								).toLocaleDateString()}</td></tr>
             </table>
             
             <h2>Code Metrics</h2>

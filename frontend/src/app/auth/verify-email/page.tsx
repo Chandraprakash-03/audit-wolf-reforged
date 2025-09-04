@@ -20,7 +20,7 @@ export default function VerifyEmailPage() {
 		? `/auth/login?redirectTo=${encodeURIComponent(redirectTo)}`
 		: "/auth/login";
 	return (
-		<div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+		<div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
 			<Card className="w-full max-w-md mx-auto">
 				<CardHeader className="text-center">
 					<CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
@@ -30,9 +30,9 @@ export default function VerifyEmailPage() {
 				</CardHeader>
 				<CardContent className="space-y-4">
 					<div className="text-center space-y-4">
-						<div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center">
+						<div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
 							<svg
-								className="w-8 h-8 text-blue-600"
+								className="w-8 h-8 text-primary"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -47,11 +47,11 @@ export default function VerifyEmailPage() {
 						</div>
 
 						<div className="space-y-2">
-							<p className="text-sm text-gray-600">
+							<p className="text-sm text-muted-foreground">
 								Please check your email and click the verification link to
 								activate your account.
 							</p>
-							<p className="text-xs text-gray-500">
+							<p className="text-xs text-muted-foreground/80">
 								Don't see the email? Check your spam folder or try again.
 							</p>
 						</div>

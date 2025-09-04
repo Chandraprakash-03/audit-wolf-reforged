@@ -32,7 +32,8 @@ router.post(
 	handleValidationErrors,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
-			const { name, sourceCode, compilerVersion } = req.body;
+			const { name, sourceCode, compilerVersion, platform, language } =
+				req.body;
 			const userId = req.user?.id;
 
 			if (!userId) {
@@ -45,7 +46,10 @@ router.post(
 			// Encrypt sensitive contract data
 			const encryptedContract = encryptionService.encryptContract(sourceCode);
 
-			// Validate Solidity code
+			// Validate contract code based on platform
+			const contractPlatform = platform || "ethereum";
+			const contractLanguage = language || "solidity";
+
 			const tempContract = new ContractModel({
 				id: "temp",
 				user_id: userId,
@@ -53,17 +57,38 @@ router.post(
 				source_code: sourceCode,
 				compiler_version: compilerVersion || "0.8.0",
 				file_hash: encryptedContract.hash,
+				blockchain_platform: contractPlatform,
+				language: contractLanguage,
 				created_at: new Date(),
 			});
 
-			const validation = tempContract.validateSolidity();
+			// Use platform-specific validation
+			let validation;
+			if (
+				contractLanguage === "solidity" ||
+				["ethereum", "bsc", "polygon"].includes(contractPlatform)
+			) {
+				validation = tempContract.validateSolidity();
+			} else {
+				// For non-Solidity platforms, use basic validation
+				validation = { isValid: true, errors: [] };
+
+				// Basic validation for non-empty code
+				if (!sourceCode.trim()) {
+					validation = {
+						isValid: false,
+						errors: ["Contract code cannot be empty"],
+					};
+				}
+			}
+
 			if (!validation.isValid) {
 				// Securely delete decrypted source code from memory
 				encryptionService.secureDelete(sourceCode);
 
 				return res.status(400).json({
 					success: false,
-					error: "Invalid Solidity code",
+					error: `Invalid ${contractLanguage} code`,
 					details: validation.errors,
 				});
 			}
@@ -74,6 +99,8 @@ router.post(
 				name,
 				source_code: JSON.stringify(encryptedContract), // Store encrypted data
 				compiler_version: compilerVersion || "0.8.0",
+				blockchain_platform: contractPlatform,
+				language: contractLanguage,
 			});
 
 			// Securely delete decrypted source code from memory
@@ -135,7 +162,7 @@ router.post(
 	authenticateToken,
 	async (req: AuthenticatedRequest, res: Response) => {
 		try {
-			const { sourceCode } = req.body;
+			const { sourceCode, platform, language } = req.body;
 
 			if (!sourceCode || typeof sourceCode !== "string") {
 				return res.status(400).json({
@@ -145,6 +172,9 @@ router.post(
 			}
 
 			// Create temporary contract for validation
+			const contractPlatform = platform || "ethereum";
+			const contractLanguage = language || "solidity";
+
 			const tempContract = new ContractModel({
 				id: "temp",
 				user_id: "temp",
@@ -152,10 +182,31 @@ router.post(
 				source_code: sourceCode,
 				compiler_version: "0.8.0",
 				file_hash: "temp",
+				blockchain_platform: contractPlatform,
+				language: contractLanguage,
 				created_at: new Date(),
 			});
 
-			const validation = tempContract.validateSolidity();
+			// Use platform-specific validation
+			let validation;
+			if (
+				contractLanguage === "solidity" ||
+				["ethereum", "bsc", "polygon"].includes(contractPlatform)
+			) {
+				validation = tempContract.validateSolidity();
+			} else {
+				// For non-Solidity platforms, use basic validation
+				validation = { isValid: true, errors: [] };
+
+				// Basic validation for non-empty code
+				if (!sourceCode.trim()) {
+					validation = {
+						isValid: false,
+						errors: ["Contract code cannot be empty"],
+					};
+				}
+			}
+
 			const metrics = tempContract.getComplexityMetrics();
 
 			res.json({

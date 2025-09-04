@@ -36,7 +36,15 @@
     "test:all": "node scripts/run-all-tests.js",
     "test:all-unit": "node scripts/run-all-tests.js --unit-only",
     "test:all-integration": "node scripts/run-all-tests.js --integration-only",
-    "test:all-load": "node scripts/run-all-tests.js --load-only"
+    "test:all-load": "node scripts/run-all-tests.js --load-only",
+    "test:multi-blockchain": "ts-node src/test/run-multi-blockchain-tests.ts",
+    "test:multi-blockchain-unit": "jest src/test/multi-blockchain-comprehensive.test.ts --verbose",
+    "test:multi-blockchain-integration": "jest src/test/integration/multi-blockchain-integration.test.ts --verbose --testTimeout=600000",
+    "test:multi-blockchain-performance": "jest src/test/performance/multi-blockchain-performance.test.ts --verbose --testTimeout=900000",
+    "test:solana": "jest src/test/solana-analyzer.test.ts --verbose",
+    "test:cardano": "jest src/test/cardano-analyzer.test.ts --verbose",
+    "test:cross-chain": "jest src/test/cross-chain-analyzer.test.ts --verbose",
+    "test:validate-setup": "ts-node src/test/validate-test-setup.ts"
   },
   "keywords": [
     "smart-contracts",

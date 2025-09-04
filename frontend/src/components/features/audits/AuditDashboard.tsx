@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Contract, PaginatedResponse, Audit } from "@/types";
+import { Contract, PaginatedResponse, Audit, MultiChainAudit } from "@/types";
 import { AuditFilters } from "./AuditFilters";
 import { AuditTable } from "./AuditTable";
 import { ReportViewer } from "./ReportViewer";
+import { PlatformStatistics } from "./PlatformStatistics";
+import { ComparativeAnalysis } from "./ComparativeAnalysis";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	auditService,
 	AuditFilters as AuditFiltersType,
@@ -13,9 +16,13 @@ import { contractService } from "@/services/contractService";
 
 export function AuditDashboard() {
 	const [audits, setAudits] = useState<(Audit & { contract?: Contract })[]>([]);
+	const [multiChainAudits, setMultiChainAudits] = useState<MultiChainAudit[]>(
+		[]
+	);
 	const [contracts, setContracts] = useState<Contract[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [activeTab, setActiveTab] = useState("history");
 
 	// Debug: Log component state
 	console.log("AuditDashboard state:", {
@@ -33,7 +40,9 @@ export function AuditDashboard() {
 		limit: 10,
 		hasMore: false,
 	});
-	const [selectedAudit, setSelectedAudit] = useState<Audit | null>(null);
+	const [selectedAudit, setSelectedAudit] = useState<
+		Audit | MultiChainAudit | null
+	>(null);
 
 	useEffect(() => {
 		loadData();
@@ -44,12 +53,15 @@ export function AuditDashboard() {
 		setError(null);
 
 		try {
-			// Load audits and contracts in parallel
-			const [auditsResponse, contractsResponse] = await Promise.all([
-				auditService.getUserAudits(filters),
-				contractService.getUserContracts(),
-			]);
+			// Load audits, multi-chain audits, and contracts in parallel
+			const [auditsResponse, multiChainResponse, contractsResponse] =
+				await Promise.all([
+					auditService.getUserAudits(filters),
+					auditService.getMultiChainAudits(filters),
+					contractService.getUserContracts(),
+				]);
 
+			// Handle regular audits
 			if (auditsResponse.success && auditsResponse.data) {
 				const auditData = auditsResponse.data;
 				setPagination({
@@ -80,6 +92,11 @@ export function AuditDashboard() {
 						: auditsResponse.error?.message || "Failed to load audits";
 				setError(errorMessage);
 			}
+
+			// Handle multi-chain audits
+			if (multiChainResponse.success && multiChainResponse.data) {
+				setMultiChainAudits(multiChainResponse.data.data || []);
+			}
 		} catch (err) {
 			const errorMessage =
 				err instanceof Error ? err.message : "Error loading data";
@@ -102,7 +119,7 @@ export function AuditDashboard() {
 		setFilters({ ...filters, page: newPage });
 	};
 
-	const handleViewReport = (audit: Audit) => {
+	const handleViewReport = (audit: Audit | MultiChainAudit) => {
 		setSelectedAudit(audit);
 	};
 
@@ -111,18 +128,22 @@ export function AuditDashboard() {
 	};
 
 	const getAuditStats = () => {
+		const allAudits = [...audits, ...multiChainAudits];
 		const stats = {
-			total: audits.length,
-			completed: audits.filter((a) => a.status === "completed").length,
-			analyzing: audits.filter((a) => a.status === "analyzing").length,
-			failed: audits.filter((a) => a.status === "failed").length,
+			total: allAudits.length,
+			completed: allAudits.filter((a) => a.status === "completed").length,
+			analyzing: allAudits.filter((a) => a.status === "analyzing").length,
+			failed: allAudits.filter((a) => a.status === "failed").length,
+			singleChain: audits.length,
+			multiChain: multiChainAudits.length,
+			crossChain: multiChainAudits.filter((a) => a.cross_chain_analysis).length,
 		};
 		return stats;
 	};
 
 	const stats = getAuditStats();
 
-	if (loading && audits.length === 0) {
+	if (loading && audits.length === 0 && multiChainAudits.length === 0) {
 		return (
 			<div className="space-y-6">
 				<div className="text-center py-8">
@@ -147,11 +168,11 @@ export function AuditDashboard() {
 
 	return (
 		<div className="space-y-6">
-			{/* Stats Overview */}
-			<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+			{/* Enhanced Stats Overview */}
+			<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
 				<Card>
 					<CardContent className="p-4 text-center">
-						<div className="text-2xl font-bold">{pagination.total}</div>
+						<div className="text-2xl font-bold">{stats.total}</div>
 						<div className="text-sm text-gray-600">Total Audits</div>
 					</CardContent>
 				</Card>
@@ -173,10 +194,26 @@ export function AuditDashboard() {
 				</Card>
 				<Card>
 					<CardContent className="p-4 text-center">
-						<div className="text-2xl font-bold text-red-600">
-							{stats.failed}
+						<div className="text-2xl font-bold text-blue-600">
+							{stats.singleChain}
 						</div>
-						<div className="text-sm text-gray-600">Failed</div>
+						<div className="text-sm text-gray-600">Single Chain</div>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardContent className="p-4 text-center">
+						<div className="text-2xl font-bold text-purple-600">
+							{stats.multiChain}
+						</div>
+						<div className="text-sm text-gray-600">Multi Chain</div>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardContent className="p-4 text-center">
+						<div className="text-2xl font-bold text-indigo-600">
+							{stats.crossChain}
+						</div>
+						<div className="text-sm text-gray-600">Cross Chain</div>
 					</CardContent>
 				</Card>
 			</div>
@@ -200,48 +237,69 @@ export function AuditDashboard() {
 				</Card>
 			)}
 
-			{/* Audit Table */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex justify-between items-center">
-						Audit History
-						<Button onClick={loadData} variant="outline" disabled={loading}>
-							{loading ? "Refreshing..." : "Refresh"}
-						</Button>
-					</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<AuditTable
-						audits={audits}
-						onViewReport={handleViewReport}
-						onRefresh={loadData}
-					/>
-				</CardContent>
-			</Card>
+			{/* Main Content Tabs */}
+			<Tabs value={activeTab} onValueChange={setActiveTab}>
+				<TabsList>
+					<TabsTrigger value="history">Audit History</TabsTrigger>
+					{/*<TabsTrigger value="analytics">Platform Analytics</TabsTrigger>*/}
+					{/*<TabsTrigger value="comparison">Comparative Analysis</TabsTrigger>*/}
+				</TabsList>
 
-			{/* Pagination */}
-			{pagination.total > pagination.limit && (
-				<div className="flex justify-center items-center gap-4">
-					<Button
-						variant="outline"
-						onClick={() => handlePageChange(pagination.page - 1)}
-						disabled={pagination.page <= 1}
-					>
-						Previous
-					</Button>
-					<span className="text-sm text-gray-600">
-						Page {pagination.page} of{" "}
-						{Math.ceil(pagination.total / pagination.limit)}
-					</span>
-					<Button
-						variant="outline"
-						onClick={() => handlePageChange(pagination.page + 1)}
-						disabled={!pagination.hasMore}
-					>
-						Next
-					</Button>
-				</div>
-			)}
+				<TabsContent value="history" className="space-y-4">
+					{/* Audit Table */}
+					<Card>
+						<CardHeader>
+							<CardTitle className="flex justify-between items-center">
+								Audit History
+								<Button onClick={loadData} variant="outline" disabled={loading}>
+									{loading ? "Refreshing..." : "Refresh"}
+								</Button>
+							</CardTitle>
+						</CardHeader>
+						<CardContent>
+							<AuditTable
+								audits={audits}
+								multiChainAudits={multiChainAudits}
+								onViewReport={handleViewReport}
+								onRefresh={loadData}
+								showPlatformInfo={true}
+							/>
+						</CardContent>
+					</Card>
+
+					{/* Pagination */}
+					{pagination.total > pagination.limit && (
+						<div className="flex justify-center items-center gap-4">
+							<Button
+								variant="outline"
+								onClick={() => handlePageChange(pagination.page - 1)}
+								disabled={pagination.page <= 1}
+							>
+								Previous
+							</Button>
+							<span className="text-sm text-gray-600">
+								Page {pagination.page} of{" "}
+								{Math.ceil(pagination.total / pagination.limit)}
+							</span>
+							<Button
+								variant="outline"
+								onClick={() => handlePageChange(pagination.page + 1)}
+								disabled={!pagination.hasMore}
+							>
+								Next
+							</Button>
+						</div>
+					)}
+				</TabsContent>
+
+				<TabsContent value="analytics">
+					<PlatformStatistics />
+				</TabsContent>
+
+				<TabsContent value="comparison">
+					<ComparativeAnalysis />
+				</TabsContent>
+			</Tabs>
 
 			{/* Report Viewer Modal */}
 			{selectedAudit && (
