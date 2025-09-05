@@ -43,7 +43,7 @@ app.post("/test-validation-error", (req, res) => {
 			},
 		});
 	}
-	res.json({ success: true });
+	return res.json({ success: true });
 });
 
 app.post("/test-rate-limit", rateLimitMiddleware, (req, res) => {
@@ -70,7 +70,16 @@ app.post("/test-large-payload", (req, res) => {
 
 // Error handling middleware
 app.use((error: any, req: any, res: any, next: any) => {
-	const errorResponse = {
+	const errorResponse: {
+		success: boolean;
+		error: {
+			code: string;
+			message: string;
+			requestId: any;
+			timestamp: string;
+			stack?: string;
+		};
+	} = {
 		success: false,
 		error: {
 			code: error.code || "INTERNAL_ERROR",

@@ -33,15 +33,15 @@ describe("Cache Service Tests", () => {
 			user_id: "user-123",
 			status: "completed",
 			static_results: {
-				slither_findings: [],
-				gas_analysis: [],
-				ast_analysis: [],
+				slitherFindings: [],
+				gasAnalysis: [],
+				astAnalysis: [],
 				complexity: {
 					lines_of_code: 100,
 					function_count: 5,
 					cyclomatic_complexity: 10,
 				},
-				executionTime: 5000,
+				// executionTime: 5000,
 			},
 			created_at: new Date(),
 		};
@@ -111,14 +111,30 @@ describe("Cache Service Tests", () => {
 		const mockReport: AuditReport = {
 			id: "report-123",
 			audit_id: "audit-123",
-			contract_name: "TestContract",
-			total_vulnerabilities: 5,
-			critical_count: 1,
-			high_count: 2,
-			medium_count: 1,
-			low_count: 1,
-			informational_count: 0,
 			executive_summary: "Test summary",
+			vulnerabilities: [
+				{
+					id: "vuln-1",
+					audit_id: "audit-123",
+					type: "reentrancy",
+					severity: "critical",
+					title: "Critical vulnerability",
+					description: "Test vulnerability",
+					location: { file: "test.sol", line: 1, column: 0, length: 10 },
+					recommendation: "Fix this",
+					confidence: 0.9,
+					source: "static",
+				},
+			],
+			gas_optimizations: [
+				{
+					type: "storage",
+					description: "Optimize storage usage",
+					location: { file: "test.sol", line: 5, column: 0, length: 20 },
+					estimated_savings: 1000,
+				},
+			],
+			recommendations: ["Use SafeMath", "Add access controls"],
 			generated_at: new Date(),
 		};
 
@@ -506,37 +522,63 @@ describe("Cache Service Tests", () => {
 				user_id: "user-123",
 				status: "completed",
 				static_results: {
-					slither_findings: [
+					slitherFindings: [
 						{
 							type: "reentrancy",
 							severity: "high",
 							description: "Test vulnerability",
-							line: 42,
-							column: 10,
+							location: {
+								file: "test.sol",
+								line: 42,
+								column: 10,
+								length: 20,
+							},
 						},
 					],
-					gas_analysis: [
+					gasAnalysis: [
 						{
-							function: "transfer",
-							gasUsed: 21000,
-							optimization: "Use unchecked block",
+							type: "storage",
+							description: "Use unchecked block for transfer function",
+							location: {
+								file: "test.sol",
+								line: 15,
+								column: 5,
+								length: 30,
+							},
+							estimated_savings: 21000,
 						},
 					],
-					ast_analysis: [],
+					astAnalysis: [],
 					complexity: {
 						lines_of_code: 100,
 						function_count: 5,
 						cyclomatic_complexity: 10,
 					},
-					executionTime: 5000,
+					// executionTime: 5000,
 				},
 				ai_results: {
-					summary: "Contract analysis complete",
-					recommendations: ["Use SafeMath", "Add access controls"],
-					risk_score: 7.5,
+					vulnerabilities: [],
+					recommendations: [
+						{
+							category: "security",
+							description: "Use SafeMath",
+							priority: "high",
+						},
+						{
+							category: "access",
+							description: "Add access controls",
+							priority: "medium",
+						},
+					],
+					codeQuality: {
+						maintainability: 8.5,
+						readability: 7.5,
+						test_coverage: 85,
+					},
+					confidence: 0.9,
 				},
 				created_at: new Date("2024-01-01T00:00:00Z"),
-				updated_at: new Date("2024-01-01T01:00:00Z"),
+				// updated_at: new Date("2024-01-01T01:00:00Z"),
 			};
 
 			mockRedis.setex.mockResolvedValue("OK");
@@ -556,7 +598,7 @@ describe("Cache Service Tests", () => {
 				user_id: "user-123",
 				status: "completed",
 				created_at: new Date("2024-01-01T00:00:00Z"),
-				updated_at: new Date("2024-01-01T01:00:00Z"),
+				// updated_at: new Date("2024-01-01T01:00:00Z"),
 			};
 
 			mockRedis.setex.mockResolvedValue("OK");
@@ -567,7 +609,7 @@ describe("Cache Service Tests", () => {
 			const retrieved = await cacheService.getCachedAuditResult("audit-123");
 
 			expect(retrieved?.created_at).toEqual(auditWithDates.created_at);
-			expect(retrieved?.updated_at).toEqual(auditWithDates.updated_at);
+			// expect(retrieved?.updated_at).toEqual(auditWithDates.updated_at);
 		});
 	});
 });

@@ -40,6 +40,8 @@ describe("AnalysisService", () => {
 			source_code: "pragma solidity ^0.8.0; contract Test {}",
 			compiler_version: "0.8.0",
 			file_hash: "hash123",
+			blockchain_platform: "ethereum" as const,
+			language: "solidity" as const,
 			created_at: new Date(),
 		};
 
