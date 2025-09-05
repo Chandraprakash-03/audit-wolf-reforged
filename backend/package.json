@@ -81,6 +81,7 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "tmp": "^0.2.3",
+    "typescript": "^5.9.2",
     "yamljs": "^0.3.0",
     "zod": "^3.25.76"
   },
