@@ -200,14 +200,14 @@ export class PDFGenerator {
 		try {
 			// Get the height of the content
 			const contentHeight = await page.evaluate(() => {
-				// TypeScript doesn't know we're in a browser context, so we need to cast
-				// const doc = document as any;
+				// Use type assertion to tell TypeScript we're in a browser context
+				const doc = document as any;
 				return Math.max(
-					document.body.scrollHeight,
-					document.body.offsetHeight,
-					document.documentElement.clientHeight,
-					document.documentElement.scrollHeight,
-					document.documentElement.offsetHeight
+					doc.body.scrollHeight,
+					doc.body.offsetHeight,
+					doc.documentElement.clientHeight,
+					doc.documentElement.scrollHeight,
+					doc.documentElement.offsetHeight
 				);
 			});
 
