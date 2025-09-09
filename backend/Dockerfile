@@ -22,11 +22,11 @@ WORKDIR /app
 # Development stage for building
 FROM base AS builder
 
-# Copy package files including lockfile
-COPY package.json package-lock.json ./
+# Copy package files
+COPY package.json ./
 
 # Install all dependencies including dev dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -56,11 +56,11 @@ RUN addgroup -g 1001 -S nodejs && \
 # Set working directory
 WORKDIR /app
 
-# Copy package files including lockfile
-COPY package.json package-lock.json ./
+# Copy package files
+COPY package.json ./
 
 # Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production && npm cache clean --force
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
