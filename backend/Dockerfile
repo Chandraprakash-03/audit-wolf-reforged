@@ -19,14 +19,11 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
-
 # Development stage for building
 FROM base AS builder
+
+# Copy package files including lockfile
+COPY package.json package-lock.json ./
 
 # Install all dependencies including dev dependencies
 RUN npm ci
@@ -59,8 +56,10 @@ RUN addgroup -g 1001 -S nodejs && \
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install production dependencies
-COPY package*.json ./
+# Copy package files including lockfile
+COPY package.json package-lock.json ./
+
+# Install only production dependencies
 RUN npm ci --only=production && npm cache clean --force
 
 # Copy built application from builder stage
