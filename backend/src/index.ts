@@ -51,7 +51,7 @@ import { logger, morganStream } from "./utils/logger";
 import { setupSwagger } from "./docs/swagger";
 
 // Load environment variables
-dotenv.config();
+// dotenv.config();
 
 // Initialize Sentry for error tracking
 initializeSentry();
@@ -63,6 +63,7 @@ process.on("uncaughtException", handleUncaughtException);
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
+console.log(PORT)
 
 // Initialize WebSocket service
 const wsService = new WebSocketService(server);
@@ -278,7 +279,7 @@ app.use(globalErrorHandler);
 
 // Only start server if not in test environment
 if (process.env.NODE_ENV !== "test") {
-	server.listen(Number(PORT),() => {
+	server.listen(Number(PORT), "0.0.0.0", () => {
 		logger.info("Audit Wolf Backend started", {
 			port: PORT,
 			environment: process.env.NODE_ENV,
