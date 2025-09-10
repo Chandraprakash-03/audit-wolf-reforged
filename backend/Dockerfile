@@ -79,7 +79,7 @@ USER nodejs
 ENV NODE_ENV=production
 
 # Expose port (Render will use PORT env var)
-EXPOSE 3001
+EXPOSE $PORT
 
 # Health check (Render will use PORT env var, default to 3001)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
