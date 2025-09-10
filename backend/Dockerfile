@@ -82,8 +82,8 @@ ENV NODE_ENV=production
 EXPOSE $PORT
 
 # Health check (Render will use PORT env var, default to 3001)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "const port = process.env.PORT || 3001; require('http').get(\`http://localhost:\${port}/health\`, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" || exit 1
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#     CMD node -e "const port = process.env.PORT || 3001; require('http').get(\`http://localhost:\${port}/health\`, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" || exit 1
 
 # Start the application
 CMD ["npm", "start"]
