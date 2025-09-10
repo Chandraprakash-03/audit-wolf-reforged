@@ -278,7 +278,7 @@ app.use(globalErrorHandler);
 
 // Only start server if not in test environment
 if (process.env.NODE_ENV !== "test") {
-	server.listen(Number(PORT), "0.0.0.0", () => {
+	server.listen(Number(PORT),() => {
 		logger.info("Audit Wolf Backend started", {
 			port: PORT,
 			environment: process.env.NODE_ENV,
