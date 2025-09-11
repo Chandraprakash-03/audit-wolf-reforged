@@ -277,13 +277,13 @@ app.use(sentryErrorHandler);
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
-if (process.env.NODE_ENV !== "test") {
+// if (process.env.NODE_ENV !== "test") {
 	const port = parseInt(process.env.PORT || '3001', 10);
-	const host = process.env.HOST || '0.0.0.0';
+	const host = '0.0.0.0';
 	
 	console.log(`Attempting to start server on ${host}:${port}`);
 	
-	server.listen(port, host, () => {
+	server.listen(10000, host, () => {
 		const actualAddress = server.address();
 		console.log('Server actually listening on:', actualAddress);
 		
@@ -325,7 +325,7 @@ if (process.env.NODE_ENV !== "test") {
 		});
 		process.exit(1);
 	});
-}
+// }
 
 // Export app for testing
 export { app };
