@@ -277,26 +277,33 @@ app.use(sentryErrorHandler);
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
-// Only start server if not in test environment
 if (process.env.NODE_ENV !== "test") {
-	server.listen(Number(PORT), '0.0.0.0', () => {
+	const port = parseInt(process.env.PORT || '3001', 10);
+	const host = process.env.HOST || '0.0.0.0';
+	
+	console.log(`Attempting to start server on ${host}:${port}`);
+	
+	server.listen(port, host, () => {
+		const actualAddress = server.address();
+		console.log('Server actually listening on:', actualAddress);
+		
 		logger.info("Audit Wolf Backend started", {
-			port: PORT,
-			host: '0.0.0.0',
+			port: port,
+			host: host,
+			actualAddress: actualAddress,
 			environment: process.env.NODE_ENV,
 			version: process.env.npm_package_version || "1.0.0",
-			// features: {
-			// 	websocket: true,
-			// 	queue: true,
-			// 	performance_monitoring: true,
-			// 	database_optimization: true,
-			// 	cdn: true,
-			// 	// error_tracking: !!process.env.SENTRY_DSN,
-			// },
+			features: {
+				websocket: true,
+				queue: true,
+				performance_monitoring: true,
+				database_optimization: true,
+				cdn: true,
+				error_tracking: !!process.env.SENTRY_DSN,
+			},
 		});
 
-		console.log(`🚀 Audit Wolf Backend running on port ${PORT}`);
-		console.log(`🌐 Server bound to 0.0.0.0:${PORT}`);
+		console.log(`🚀 Audit Wolf Backend running on ${host}:${port}`);
 		console.log(`📡 WebSocket server ready for connections`);
 		console.log(`⚡ Queue system initialized`);
 		console.log(`📊 Performance monitoring enabled`);
@@ -306,6 +313,17 @@ if (process.env.NODE_ENV !== "test") {
 			`🔍 Error tracking ${process.env.SENTRY_DSN ? "enabled" : "disabled"}`
 		);
 		console.log(`📝 Logging to files enabled`);
+	});
+
+	server.on('error', (error: any) => {
+		console.error('❌ Server failed to start:', error);
+		logger.error('Server startup failed', { 
+			error: error.message, 
+			stack: error.stack,
+			port: port,
+			host: host
+		});
+		process.exit(1);
 	});
 }
 
