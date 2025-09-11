@@ -78,12 +78,16 @@ USER nodejs
 # Set production environment
 ENV NODE_ENV=production
 
-# Expose port (Render will use PORT env var)
+# Render will provide the PORT environment variable
+# Default to 3001 for local development
+ENV PORT=3001
+
+# Expose the port (this is more for documentation, Render uses PORT env var)
 EXPOSE $PORT
 
-# Health check (Render will use PORT env var, default to 3001)
-# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-#     CMD node -e "const port = process.env.PORT || 3001; require('http').get(\`http://localhost:\${port}/health\`, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" || exit 1
+# Health check - Enable this for better monitoring
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+#     CMD node -e "const http = require('http'); const port = process.env.PORT || 3001; const options = { host: '0.0.0.0', port: port, path: '/health', timeout: 3000 }; const req = http.request(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"
 
 # Start the application
 CMD ["npm", "start"]
