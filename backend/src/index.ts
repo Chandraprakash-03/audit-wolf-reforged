@@ -279,22 +279,24 @@ app.use(globalErrorHandler);
 
 // Only start server if not in test environment
 if (process.env.NODE_ENV !== "test") {
-	server.listen(Number(PORT), "0.0.0.0", () => {
+	server.listen(Number(PORT), '0.0.0.0', () => {
 		logger.info("Audit Wolf Backend started", {
 			port: PORT,
+			host: '0.0.0.0',
 			environment: process.env.NODE_ENV,
 			version: process.env.npm_package_version || "1.0.0",
-			features: {
-				websocket: true,
-				queue: true,
-				performance_monitoring: true,
-				database_optimization: true,
-				cdn: true,
-				error_tracking: !!process.env.SENTRY_DSN,
-			},
+			// features: {
+			// 	websocket: true,
+			// 	queue: true,
+			// 	performance_monitoring: true,
+			// 	database_optimization: true,
+			// 	cdn: true,
+			// 	// error_tracking: !!process.env.SENTRY_DSN,
+			// },
 		});
 
 		console.log(`🚀 Audit Wolf Backend running on port ${PORT}`);
+		console.log(`🌐 Server bound to 0.0.0.0:${PORT}`);
 		console.log(`📡 WebSocket server ready for connections`);
 		console.log(`⚡ Queue system initialized`);
 		console.log(`📊 Performance monitoring enabled`);
