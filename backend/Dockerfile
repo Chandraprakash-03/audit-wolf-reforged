@@ -80,7 +80,7 @@ ENV NODE_ENV=production
 
 # Render will provide the PORT environment variable
 # Default to 3001 for local development
-ENV PORT=3001
+ENV PORT=10000
 
 # Expose the port (this is more for documentation, Render uses PORT env var)
 EXPOSE $PORT
