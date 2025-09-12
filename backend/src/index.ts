@@ -51,7 +51,7 @@ import { logger, morganStream } from "./utils/logger";
 import { setupSwagger } from "./docs/swagger";
 
 // Load environment variables
-dotenv.config();
+// dotenv.config();
 
 // Initialize Sentry for error tracking
 initializeSentry();
@@ -63,7 +63,7 @@ process.on("uncaughtException", handleUncaughtException);
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
-console.log(PORT)
+console.log(PORT);
 
 // Initialize WebSocket service
 const wsService = new WebSocketService(server);
@@ -278,53 +278,53 @@ app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
 // if (process.env.NODE_ENV !== "test") {
-	const port = parseInt(process.env.PORT || '3001', 10);
-	const host = '0.0.0.0';
-	
-	console.log(`Attempting to start server on ${host}:${port}`);
-	
-	server.listen(10000, host, () => {
-		const actualAddress = server.address();
-		console.log('Server actually listening on:', actualAddress);
-		
-		logger.info("Audit Wolf Backend started", {
-			port: port,
-			host: host,
-			actualAddress: actualAddress,
-			environment: process.env.NODE_ENV,
-			version: process.env.npm_package_version || "1.0.0",
-			features: {
-				websocket: true,
-				queue: true,
-				performance_monitoring: true,
-				database_optimization: true,
-				cdn: true,
-				error_tracking: !!process.env.SENTRY_DSN,
-			},
-		});
+const port = parseInt(process.env.PORT || "3001", 10);
+const host = "0.0.0.0";
 
-		console.log(`🚀 Audit Wolf Backend running on ${host}:${port}`);
-		console.log(`📡 WebSocket server ready for connections`);
-		console.log(`⚡ Queue system initialized`);
-		console.log(`📊 Performance monitoring enabled`);
-		console.log(`🗄️ Database optimization enabled`);
-		console.log(`🚀 CDN service initialized`);
-		console.log(
-			`🔍 Error tracking ${process.env.SENTRY_DSN ? "enabled" : "disabled"}`
-		);
-		console.log(`📝 Logging to files enabled`);
+console.log(`Attempting to start server on ${host}:${port}`);
+
+server.listen(10000, host, () => {
+	const actualAddress = server.address();
+	console.log("Server actually listening on:", actualAddress);
+
+	logger.info("Audit Wolf Backend started", {
+		port: port,
+		host: host,
+		actualAddress: actualAddress,
+		environment: process.env.NODE_ENV,
+		version: process.env.npm_package_version || "1.0.0",
+		features: {
+			websocket: true,
+			queue: true,
+			performance_monitoring: true,
+			database_optimization: true,
+			cdn: true,
+			error_tracking: !!process.env.SENTRY_DSN,
+		},
 	});
 
-	server.on('error', (error: any) => {
-		console.error('❌ Server failed to start:', error);
-		logger.error('Server startup failed', { 
-			error: error.message, 
-			stack: error.stack,
-			port: port,
-			host: host
-		});
-		process.exit(1);
+	console.log(`🚀 Audit Wolf Backend running on ${host}:${port}`);
+	console.log(`📡 WebSocket server ready for connections`);
+	console.log(`⚡ Queue system initialized`);
+	console.log(`📊 Performance monitoring enabled`);
+	console.log(`🗄️ Database optimization enabled`);
+	console.log(`🚀 CDN service initialized`);
+	console.log(
+		`🔍 Error tracking ${process.env.SENTRY_DSN ? "enabled" : "disabled"}`
+	);
+	console.log(`📝 Logging to files enabled`);
+});
+
+server.on("error", (error: any) => {
+	console.error("❌ Server failed to start:", error);
+	logger.error("Server startup failed", {
+		error: error.message,
+		stack: error.stack,
+		port: port,
+		host: host,
 	});
+	process.exit(1);
+});
 // }
 
 // Export app for testing
