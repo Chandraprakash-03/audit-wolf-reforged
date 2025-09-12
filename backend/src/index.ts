@@ -51,7 +51,7 @@ import { logger, morganStream } from "./utils/logger";
 import { setupSwagger } from "./docs/swagger";
 
 // Load environment variables
-// dotenv.config();
+dotenv.config();
 
 // Initialize Sentry for error tracking
 initializeSentry();
